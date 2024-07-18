@@ -1,0 +1,65 @@
+local tanks = require("main.tanks")
+
+go.property("tid", 0)
+
+function init(self)
+
+	local pos = go.get_position()
+	self.target_pos = vmath.vector3(pos)
+	self.angle 		= 0.0
+	self.target_rot = 0.0 -- vmath.quat_rotation_y(self.angle)
+	self.smoothstep = 0.08
+end
+
+function final(self)
+	-- Add finalization code here
+	-- Learn more: https://defold.com/manuals/script/
+	-- Remove this function if not needed
+end
+
+local function vecangle( v1 ) 
+
+	local vup = Vec3Set(0.0, 0.0, 1.0)
+	local veccos = (vup.x * -v1.x + vup.y * v1.y + vup.z * v1.z)
+	return math.acos(veccos)
+end
+
+function update(self, dt)
+
+	local tdata = tanks.updateTank( self.tid, dt )
+	local angle = 0.0
+	if(tdata) then 
+		local tpos = tdata.mover.position()
+		local fwd = tdata.mover.forward()
+		angle =  vecangle(fwd)
+		self.target_pos =  vmath.vector3(tpos.x, 752-tpos.z, 0.5)
+	end 
+	
+	local pos = go.get_position()
+	go.set_position( vmath.lerp(self.smoothstep, pos, self.target_pos) )
+
+	-- local angle = self.target_rot --vmath.lerp(self.smoothstep, self.angle, self.target_rot)
+	local adiff = angle - self.target_rot 
+	self.target_rot = angle
+	go.set_rotation( vmath.quat_rotation_z(angle))
+end
+
+function on_message(self, message_id, message, sender)
+
+	if(message_id == hash("tank_id")) then 
+		self.tid = message.id
+	end 
+	if(message_id == hash("tank_move")) then 
+
+		self.target_pos = message.target_pos
+		self.target_rot = message.target_rot
+	end
+	if(message_id == hash("tank_kill")) then 
+
+		-- Would normally send a anim/sound msg here
+		go.delete() 
+	end
+end
+
+function on_reload(self)
+end

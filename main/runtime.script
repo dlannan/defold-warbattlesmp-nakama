@@ -1,0 +1,465 @@
+
+local swtest = require("main.swampy-warbattlesmp")
+
+local chance = require("lua.chance")
+local utils  = require("lua.utils")
+
+local bser 	 = require("lua.binser")
+local sfolk  = require("lua.smallfolk")
+local rlua 	 = require("render.render")
+
+local tanks  = require("main.tanks")
+
+-- Dodgy fixed point to start with
+local START_POS 	= vmath.vector3(500, 500, 1)
+
+local COLOR_WHITE 	= vmath.vector4(1, 1, 1, 1)
+
+-- ---------------------------------------------------------------------------
+
+local function colorgen()
+
+	local deg = math.rad(120) -- used for stepping rgb
+	local rdeg = math.floor(math.random(1, 360) / 16) * 16
+	local d1 = math.rad(rdeg)
+
+	local col = vmath.vector4()
+	col.x = (math.sin(d1) + 1.0) * 0.5
+	col.y = (math.sin(d1 + deg) + 1.0) * 0.5
+	col.z = (math.sin(d1 + deg + deg) + 1.0) * 0.5
+	col.w = 1.0
+	return col
+end 
+	
+-- ---------------------------------------------------------------------------
+
+local function logtext(self, str)
+
+	pprint(str)
+	-- msg.post("/gui#log", "logtext", { text = str } )
+end 
+
+
+-- ---------------------------------------------------------------------------
+
+local function clipstate(state, size)
+
+	local out = {}
+	for i,d in ipairs(state) do 
+		if(i > size) then break end
+		tinsert(out, d)
+	end 
+	return out
+end
+
+---------------------------------------------------------------------------------
+-- Gets a cleaned up gameobject (less data)
+local function getGameObject(gameobj)
+
+	local slimobj = {
+		name        = gameobj.name,
+		gamename    = gameobj.gamename, 
+		maxsize     = gameobj.maxsize,
+		people      = gameobj.people,
+		owner       = gameobj.owner, 
+		private     = gameobj.private, 
+		state       = gameobj.state,
+		frame       = gameobj.frame,
+		time        = gameobj.time,
+		ws_port     = gameobj.ws_port,
+		init 		= gameobj.init,
+	}
+	return slimobj
+end
+
+-- ---------------------------------------------------------------------------
+
+local function startgame(self, data)
+
+	self.slimobj = getGameObject(self.game)
+	tanks.createTanks(self.slimobj)
+
+	gGameTime = self.game.time
+
+	-- Apply a fake name to start
+	logtext(self, data["status"])
+	msg.post("/gui-lobby", "gamestart")
+	--pprint(self.game)
+	msg.post("/gui-players", "gamestart", { people = self.game.people, myname = self.player_name })
+	msg.post("/gui-players", "gamename", { gamename = self.game.gamename })
+end
+
+-- ---------------------------------------------------------------------------
+
+local function setname(self, name, callback)
+
+	self.player_color	= colorgen()
+	self.player_name 	= name
+	self.player_uid 	= self.user_id
+	swtest.updateaccount( self, function(data) 
+		callback(data)
+	end)
+end
+
+-- ---------------------------------------------------------------------------
+-- Players have either left or joined the game. 
+--   Find out who, and then add/remove other player objects
+--   Also determines if we have all the players that are in the game 
+--   during startup and adds them 
+local function playerschanged(self) 
+
+	print("PEOPLE:", utils.tcount(self.game.people))
+	for k,v in ipairs(self.game.people) do 
+		-- Missing player - add it! - disable input!!
+		-- dont add self 
+		if(self.player_uid ~= v.uid) then 
+			if(self.otherplayers[v.uid] == nil) then 
+
+				-- print("creating other player: ", v.uid, v.username)
+				local newplayer = factory.create("/players#playerfactory", START_POS, nil, {})
+				msg.post(newplayer, "player_details", { name = v.username, color = COLOR_WHITE, other=true})
+				self.otherplayers[v.uid] = newplayer
+			end 
+		end
+	end 
+
+	msg.post("/gui-players", "gameplayers", { people = self.game.people, myname = self.player_name })
+end
+
+-- ---------------------------------------------------------------------------
+
+function updatestates(self)
+
+	if(self.game.state == nil) then return end 
+	local state_count = utils.tcount(self.game.state)
+	-- pprint("[STATE COUNT]", state_count)
+	local used = {}
+	
+	for i = 1, state_count do 
+		local v = table.remove(self.game.state, 1)	
+		-- Ignore old states
+		if(v and v.uid) then 
+
+--			if(used[v.uid] == nil or v.f) then 
+				local pid = self.otherplayers[v.uid]
+				if(pid) then
+					-- local pos = vmath.vector3(v.x, v.y, 1)
+					--go.animate(pid, "position", go.PLAYBACK_ONCE_FORWARD, pos, go.EASING_LINEAR, 0.2)
+					--go.set_position(pos, pid)
+					if(v.f) then 
+						msg.post(pid, "player_shoot", v)
+					else
+						msg.post(pid, "player_move", v)
+					end
+				end 
+				used[v.uid] = true
+--			end
+		end 
+	end
+	-- Consume whole state list
+	self.game.state = nil
+end 
+
+-- ---------------------------------------------------------------------------
+
+local function websocket_callback(self, conn, data)
+
+	--pprint("[WS CALLBACK]", data.event)
+	if data.event == websocket.EVENT_DISCONNECTED then
+		pprint("Disconnected: " .. tostring(conn))
+		self.ws_connect = nil
+
+	elseif data.event == websocket.EVENT_CONNECTED then
+		pprint("Connected: " .. tostring(conn))
+		
+		local evt = { event = "REQUEST_PEOPLE", frame = self.game.frame }
+		swtest.websocket_send(self, sfolk.dumps(evt))
+		
+	elseif data.event == websocket.EVENT_ERROR then
+		pprint("Error: '" .. data.message .. "'")
+		
+	elseif data.event == websocket.EVENT_MESSAGE then
+
+		-- Ignore any bs msg data
+		if(data.message and #data.message > 10) then 
+			
+			local msg = sfolk.loads(data.message)
+			if(msg and msg.event) then 
+
+				if(msg.event == "REQUEST_GAME") then 
+					self.game = msg.data
+
+				elseif(self.game) then 
+					self.game.frame = msg.frame 
+					self.game.time = msg.time  * 0.001
+				end
+				-- print(msg.event)
+
+				if(msg.event == "REQUEST_ROUND") then 
+					self.game.state = msg.data
+					updatestates(self)
+				
+				elseif(msg.event == "REQUEST_PEOPLE") then 
+
+					self.game.people = msg.data
+					playerschanged(self)
+				end
+			end 
+		end 
+	end
+end
+
+-- ---------------------------------------------------------------------------
+
+local function connectgame(self, callback)
+	swtest.setup(self, "WarBattlesMP", "player1")
+	swtest.login(self, function(data) 
+		if(data == nil) then 
+			logtext(self, "Login FAILED.")
+			msg.post("/gui-lobby", "connect_error")
+		else 
+			logtext(self, "Login OK.")
+			callback()
+		end 
+	end)
+end 
+
+-- ---------------------------------------------------------------------------
+
+local function joingame(self) 
+
+	-- First connect 
+	swtest.connect(self, function(data) 
+		logtext(self, "Connection: "..tostring(data))
+
+		setname(self, chance:name(), function(data) 
+			-- find the game name 
+			swtest.findgame( self, self.gamename, function(data) 
+				logtext(self, data["status"])
+				-- Game not found, then create one and join!
+				if(data["status"] ~= "OK") then 
+
+					swtest.creategame( self, self.gamename, function(data) 
+						if(data.status and data.status == "OK") then 
+							self.game = json.decode(data.result)
+							swtest.websocket_open(self, websocket_callback)
+						end
+						startgame(self, data)
+					end)
+				-- Found the game!
+				else
+					swtest.joingame( self, self.gamename, function(data) 
+						if(data.status and data.status == "OK") then 
+							self.game = json.decode(data.result)
+							swtest.websocket_open(self, websocket_callback)
+						end
+						startgame(self, data)
+					end)
+				end 
+			end) 
+		end)
+	end)
+end 
+
+-- ---------------------------------------------------------------------------
+
+function init(self)
+	self.gamerunning 	= false
+	self.otherplayers 	= {}
+	self.frame 			= 0
+	self.sendbuffer 	= {}
+	
+	msg.post(".", "acquire_input_focus")
+	chance:seed(os.time())
+
+	msg.post ("@render:", "use_player_pos", { player_pos = vmath.vector3() })
+end
+
+-- ---------------------------------------------------------------------------
+
+function final(self)
+	if(self.game) then swtest.websocket_open(self) end
+end
+
+-- ---------------------------------------------------------------------------
+
+function update(self, dt)
+
+	-- Polling is used to sync game state from server
+	if(self.frame % 180 == 0) then 
+		if(self.game and self.game.people) then
+			local plist = ""
+			for k,v in ipairs(self.game.people) do 
+				plist = plist..v.username.."\n"
+			end 
+			msg.post("/gui#ui", "update_players", {players = plist})
+		end 
+	end
+
+	if(self.game) then 
+		tanks.gamedata.time = self.game.time
+	end
+
+-- 	if(self.frame % 130 == 0) then 
+-- 		if(self.game) then 
+-- 			local evt = { event = "REQUEST_PEOPLE", frame = self.game.frame }
+-- 			swtest.websocket_send(self, sfolk.dumps(evt))
+-- 		end
+-- 	end
+-- 
+	-- Odd timing to make the stepping cycle
+	if(self.frame % 97 == 0) then 
+		if(self.game) then 
+			local evt = { event = "REQUEST_GAME", frame = self.game.frame }
+			swtest.websocket_send(self, sfolk.dumps(evt))
+		end
+	end
+	
+-- 	if(self.frame % 10 == 0) then 
+-- 		if(self.game) then 
+-- 
+-- 			local evt = { event = "REQUEST_ROUND", frame = self.game.frame }
+-- 			swtest.websocket_send(self, sfolk.dumps(evt))
+-- 		end
+-- 	end
+-- 
+	self.frame = self.frame + 1
+end
+
+-- ---------------------------------------------------------------------------
+
+local function cleanupgame(self)
+
+	print("[CLEANUP GAME]")
+	if(self.thisplayer) then 
+		go.delete(self.thisplayer)
+		self.thisplayer = nil 
+	end
+	
+	for k,v in pairs(self.otherplayers) do 
+		go.delete(v)
+	end 
+	self.otherplayers = {}
+end
+
+-- ---------------------------------------------------------------------------
+
+local function togglegui(self)
+	self.gamerunning = not self.gamerunning
+	if(self.gamerunning) then 
+		msg.post("/gui-bg", "disable")	
+		msg.post("/gui-lobby", "disable")	
+		msg.post("/gui-players", "disable")
+		msg.post ("@render:", "use_player_pos", { player_pos = vmath.vector3() })
+	else
+		msg.post("/gui-bg", "enable")	
+		msg.post("/gui-lobby", "enable")	
+	end
+
+	if(self.gamerunning == false) then 
+		cleanupgame(self)
+	end 
+end
+
+-- ---------------------------------------------------------------------------
+
+function on_message(self, message_id, message, sender)
+
+	if( message_id== hash("togglegui") ) then 
+		togglegui(self)
+	end
+
+	-- Joining can mean either joining a current game or creating and joining a new one
+	if( message_id== hash("joingame") ) then 
+
+		connectgame(self, function()
+			self.otherplayers 	= {}
+			self.gamename = message.gamename
+			msg.post("/gui#ui", "update_gamename", {name = self.gamename})
+			if(self.gamename and string.len(self.gamename)) then 
+				joingame(self)
+			end 
+		end)
+	end
+	
+	if( message_id== hash("setname") ) then 
+		if(message.name and string.len(message.name)) then 
+			setname(self, message.name, function(data) 
+				swtest.updategame( self, function(gamedata)
+					self.game = json.decode(gamedata)
+					-- pprint(gamedata)
+					msg.post("/gui-players", "gamestart", { people = self.game.people })
+				end)
+			end)
+		end 
+	end
+	if(message_id == hash("mainmenu") ) then 
+		msg.post("/gui-bg", "enable")	
+		msg.post("/gui-lobby", "enable")	
+		msg.post("/gui-players", "disable")
+		swtest.leavegame( self, self.gamename, function(data) 
+			self.game = nil
+		end)
+	end
+
+	if(message_id == hash("begingame") ) then 
+
+		-- TODO: put this in a func
+		self.thisplayer = factory.create("/players#playerfactory", START_POS, nil, {})
+		msg.post(self.thisplayer, "player_details", {name = self.player_name, color = self.player_color})
+		self.gamerunning = true
+	end
+
+	-- Send server player move
+	--    Server collects these, then sends out to other players in state 
+	--    output. 
+	if(message_id == hash("player_move") ) then 
+
+		-- Only allow single messgae in a frame
+		if(self.last_player_move and self.last_player_move+2 >= self.frame) then return end
+		local state 	= message.state 
+		if(state.x and state.y) then 
+			local w,h 		= rlua.get_win()
+			target_player_pos = vmath.vector3(-state.x + w * 0.5, -state.y + h * 0.5, 0)
+			msg.post ("@render:", "use_player_pos", { player_pos = target_player_pos })
+		end
+		state.uid 		= self.user_id
+		--state.lt 		= self.game.frame + 2
+
+		self.last_player_move = self.frame
+		local evt = { event = "PLAYER_MOVE", frame = self.frame, data = state }
+		local dsend = sfolk.dumps(evt)
+		swtest.websocket_send(self, dsend)
+	end 
+	
+	if(message_id == hash("player_shoot") ) then 
+
+		-- Only allow single messgae in a frame
+		if(self.last_player_shoot and self.last_player_shoot+2 >= self.frame) then return end
+		local state 	= message.state 
+		state.uid 		= self.user_id
+		--state.lt 		= self.game.frame + 2
+		
+		self.last_player_shoot = self.frame
+		local evt = { event = "PLAYER_SHOOT", frame = self.frame, data = state }
+		local dsend = sfolk.dumps(evt)
+		swtest.websocket_send(self, dsend)
+	end 
+end
+
+-- ---------------------------------------------------------------------------
+
+function on_input(self, action_id, action)
+
+	if action_id == hash("escape") and action.pressed then
+		pprint("Escaped pressed")
+		togglegui(self)
+	end
+end
+
+-- ---------------------------------------------------------------------------
+
+function on_reload(self)
+end
+
+-- ---------------------------------------------------------------------------
