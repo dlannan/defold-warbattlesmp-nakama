@@ -34,3 +34,7 @@ http_cache = 1
 [profiler]
 track_cpu = 0
 
+[nakama]
+host = nakama.kakutai.com
+port = 7350
+server_key = defaultkey

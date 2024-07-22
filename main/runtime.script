@@ -1,8 +1,9 @@
 
-local swtest = require("main.swampy-warbattlesmp")
+local nakamamp = require("main.nakama-warbattlesmp")
 
 local chance = require("lua.chance")
 local utils  = require("lua.utils")
+local md5    = require("lua.md5")
 
 local bser 	 = require("lua.binser")
 local sfolk  = require("lua.smallfolk")
@@ -96,7 +97,8 @@ local function setname(self, name, callback)
 	self.player_color	= colorgen()
 	self.player_name 	= name
 	self.player_uid 	= self.user_id
-	swtest.updateaccount( self, function(data) 
+
+	nakamamp.updateaccount( self, function(data) 
 		callback(data)
 	end)
 end
@@ -173,7 +175,7 @@ local function websocket_callback(self, conn, data)
 		pprint("Connected: " .. tostring(conn))
 		
 		local evt = { event = "REQUEST_PEOPLE", frame = self.game.frame }
-		swtest.websocket_send(self, sfolk.dumps(evt))
+		nakamamp.websocket_send(self, sfolk.dumps(evt))
 		
 	elseif data.event == websocket.EVENT_ERROR then
 		pprint("Error: '" .. data.message .. "'")
@@ -212,9 +214,9 @@ end
 -- ---------------------------------------------------------------------------
 
 local function connectgame(self, callback)
-	swtest.setup(self, "WarBattlesMP", "player1")
-	swtest.login(self, function(data) 
-		if(data == nil) then 
+	-- nakamamp.setup(self, "WarBattlesMP", "player1")
+	nakamamp.login(self, function(err, data) 
+		if(err == false) then 
 			logtext(self, "Login FAILED.")
 			msg.post("/gui-lobby", "connect_error")
 		else 
@@ -229,36 +231,45 @@ end
 local function joingame(self) 
 
 	-- First connect 
-	swtest.connect(self, function(data) 
-		logtext(self, "Connection: "..tostring(data))
+	-- nakamamp.connect(self, function(data) 
 
 		setname(self, chance:name(), function(data) 
 			-- find the game name 
-			swtest.findgame( self, self.gamename, function(data) 
-				logtext(self, data["status"])
-				-- Game not found, then create one and join!
-				if(data["status"] ~= "OK") then 
+			-- nakamamp.findgame( self, self.gamename, function(data) 
 
-					swtest.creategame( self, self.gamename, function(data) 
-						if(data.status and data.status == "OK") then 
-							self.game = json.decode(data.result)
-							swtest.websocket_open(self, websocket_callback)
-						end
-						startgame(self, data)
-					end)
-				-- Found the game!
-				else
-					swtest.joingame( self, self.gamename, function(data) 
-						if(data.status and data.status == "OK") then 
-							self.game = json.decode(data.result)
-							swtest.websocket_open(self, websocket_callback)
-						end
-						startgame(self, data)
-					end)
-				end 
-			end) 
+			-- 	logtext(self, data["status"])
+			-- 	-- Game not found, then create one and join!
+			-- 	if(data["status"] ~= "OK") then 
+
+			-- 		nakamamp.creategame( self, self.gamename, function(data) 
+			-- 			if(data.status and data.status == "OK") then 
+			-- 				self.game = json.decode(data.result)
+			-- 				nakamamp.websocket_open(self, websocket_callback)
+			-- 			end
+			-- 			startgame(self, data)
+			-- 		end)
+			-- 	-- Found the game!
+			-- 	else
+			-- 		nakamamp.joingame( self, self.gamename, function(data) 
+			-- 			if(data.status and data.status == "OK") then 
+			-- 				self.game = json.decode(data.result)
+			-- 				nakamamp.websocket_open(self, websocket_callback)
+			-- 			end
+			-- 			startgame(self, data)
+			-- 		end)
+			-- 	end 
+			-- end) 
+
+			nakamamp.join_match(self, self.gamename, "token", function(joined)
+				if(joined == true) then 
+					pprint("JOINED_GANME: "..self.gamename)
+					startgame(self, data)
+				else 
+					pprint("[ERROR] FAILED_TO_JOIN_GANME: "..self.gamename)
+				end
+			end)
 		end)
-	end)
+	-- end)
 end 
 
 -- ---------------------------------------------------------------------------
@@ -278,7 +289,7 @@ end
 -- ---------------------------------------------------------------------------
 
 function final(self)
-	if(self.game) then swtest.websocket_open(self) end
+	if(self.game) then nakamamp.websocket_open(self) end
 end
 
 -- ---------------------------------------------------------------------------
@@ -303,7 +314,7 @@ function update(self, dt)
 -- 	if(self.frame % 130 == 0) then 
 -- 		if(self.game) then 
 -- 			local evt = { event = "REQUEST_PEOPLE", frame = self.game.frame }
--- 			swtest.websocket_send(self, sfolk.dumps(evt))
+-- 			nakamamp.websocket_send(self, sfolk.dumps(evt))
 -- 		end
 -- 	end
 -- 
@@ -311,7 +322,7 @@ function update(self, dt)
 	if(self.frame % 97 == 0) then 
 		if(self.game) then 
 			local evt = { event = "REQUEST_GAME", frame = self.game.frame }
-			swtest.websocket_send(self, sfolk.dumps(evt))
+			nakamamp.websocket_send(self, sfolk.dumps(evt))
 		end
 	end
 	
@@ -319,7 +330,7 @@ function update(self, dt)
 -- 		if(self.game) then 
 -- 
 -- 			local evt = { event = "REQUEST_ROUND", frame = self.game.frame }
--- 			swtest.websocket_send(self, sfolk.dumps(evt))
+-- 			nakamamp.websocket_send(self, sfolk.dumps(evt))
 -- 		end
 -- 	end
 -- 
@@ -377,7 +388,7 @@ function on_message(self, message_id, message, sender)
 			self.gamename = message.gamename
 			msg.post("/gui#ui", "update_gamename", {name = self.gamename})
 			if(self.gamename and string.len(self.gamename)) then 
-				joingame(self)
+				joingame(self)				
 			end 
 		end)
 	end
@@ -385,7 +396,7 @@ function on_message(self, message_id, message, sender)
 	if( message_id== hash("setname") ) then 
 		if(message.name and string.len(message.name)) then 
 			setname(self, message.name, function(data) 
-				swtest.updategame( self, function(gamedata)
+				nakamamp.updategame( self, function(gamedata)
 					self.game = json.decode(gamedata)
 					-- pprint(gamedata)
 					msg.post("/gui-players", "gamestart", { people = self.game.people })
@@ -397,7 +408,7 @@ function on_message(self, message_id, message, sender)
 		msg.post("/gui-bg", "enable")	
 		msg.post("/gui-lobby", "enable")	
 		msg.post("/gui-players", "disable")
-		swtest.leavegame( self, self.gamename, function(data) 
+		nakamamp.leavegame( self, self.gamename, function(data) 
 			self.game = nil
 		end)
 	end
@@ -429,7 +440,7 @@ function on_message(self, message_id, message, sender)
 		self.last_player_move = self.frame
 		local evt = { event = "PLAYER_MOVE", frame = self.frame, data = state }
 		local dsend = sfolk.dumps(evt)
-		swtest.websocket_send(self, dsend)
+		nakamamp.websocket_send(self, dsend)
 	end 
 	
 	if(message_id == hash("player_shoot") ) then 
@@ -443,7 +454,7 @@ function on_message(self, message_id, message, sender)
 		self.last_player_shoot = self.frame
 		local evt = { event = "PLAYER_SHOOT", frame = self.frame, data = state }
 		local dsend = sfolk.dumps(evt)
-		swtest.websocket_send(self, dsend)
+		nakamamp.websocket_send(self, dsend)
 	end 
 end
 
