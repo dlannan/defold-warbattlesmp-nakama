@@ -3,7 +3,6 @@ title = War battles MP Nakama
 version = 0.1
 dependencies#0 = https://github.com/britzl/gooey/archive/master.zip
 dependencies#1 = https://github.com/defold/extension-websocket/archive/master.zip
-dependencies#2 = https://github.com/heroiclabs/nakama-defold/archive/refs/tags/3.1.0.zip
 
 [bootstrap]
 main_collection = /main/main.collectionc
@@ -38,3 +37,4 @@ track_cpu = 0
 host = nakama.kakutai.com
 port = 7350
 server_key = defaultkey
+

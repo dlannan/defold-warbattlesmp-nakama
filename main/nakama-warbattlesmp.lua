@@ -219,25 +219,33 @@ end
 
 -- join a match (provided by the matchmaker)
 local function join_match(self, match_id, token, match_callback)
-	-- nakama.sync(function()
 	local match = nil
-		log("Sending match_join message")
-		local metadata = { some = "data" }
+	log("Sending match_join message")
+	local metadata = { some = "1" }
 
-		realtime.match_join(self.socket, match_id, token, metadata, function(result)
-			pprint(result)
-			if result.match then
-				pprint(result)
-				match = result.match
-				match_callback(true)
-			elseif result.error then
-				log("[ERROR]"..result.error.message)
-				pprint("[ERROR]"..result)
-				match = nil
-				match_callback(false)
-			end			
-		end)
-	-- end)
+	local resp = realtime.match_join(self.socket, match_id, nil, metadata)
+	pprint(resp)
+	if resp.match then
+		pprint(resp)
+		match = resp.match
+		match_callback(true)
+	elseif resp.error then
+		log("[ERROR]"..resp.error.message)
+		pprint("[ERROR]",resp)
+		match = nil
+	end			
+
+	log("match_join done...")
+	pprint(resp)
+
+	-- Failed to join then make a game!
+	if(resp.error) then 
+		log("creating match: "..self.gamename)
+		local match_data = realtime.match_create(self.socket, self.gamename)
+		pprint(match_data)
+	else 
+		match_callback(false)
+	end
 end
 
 

@@ -260,7 +260,7 @@ local function joingame(self)
 			-- 	end 
 			-- end) 
 
-			nakamamp.join_match(self, self.gamename, "token", function(joined)
+			nakamamp.join_match(self, self.gamename, chance:string(20), function(joined)
 				if(joined == true) then 
 					pprint("JOINED_GANME: "..self.gamename)
 					startgame(self, data)
