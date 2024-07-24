@@ -219,7 +219,7 @@ end
 
 -- join a match (provided by the matchmaker)
 local function join_match(self, match_id, token, match_callback)
-	local match = nil
+	self.match = nil
 	log("Sending match_join message")
 	local metadata = { some = "1" }
 
@@ -227,24 +227,19 @@ local function join_match(self, match_id, token, match_callback)
 	pprint(resp)
 	if resp.match then
 		pprint(resp)
-		match = resp.match
-		match_callback(true)
+		self.match = resp.match
+		self.match.owner = resp.match.match_id
+		match_callback(true, self.match)
 	elseif resp.error then
 		log("[ERROR]"..resp.error.message)
 		pprint("[ERROR]",resp)
-		match = nil
-	end			
-
-	log("match_join done...")
-	pprint(resp)
-
-	-- Failed to join then make a game!
-	if(resp.error) then 
-		log("creating match: "..self.gamename)
-		local match_data = realtime.match_create(self.socket, self.gamename)
-		pprint(match_data)
+		
+		self.match = realtime.match_create(self.socket, self.gamename)
+		pprint(self.match)
+		self.match.owner = self.match.match.self.username
+		match_callback(true, self.match)
 	else 
-		match_callback(false)
+		match_callback(false, nil)
 	end
 end
 

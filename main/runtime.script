@@ -260,9 +260,24 @@ local function joingame(self)
 			-- 	end 
 			-- end) 
 
-			nakamamp.join_match(self, self.gamename, chance:string(20), function(joined)
+			nakamamp.join_match(self, self.gamename, chance:string(20), function(joined, gamedata)
 				if(joined == true) then 
 					pprint("JOINED_GANME: "..self.gamename)
+					pprint(gamedata)
+					self.game = { 
+						match = gamedata, 
+						name = self.player_name, 
+						gamename = self.gamename,
+						maxsize = 4,
+						people = gamedata.match.size,
+						owner = gamedata.owner,
+						private = true,
+						state = {},
+						frame = 0,
+						time = socket.gettime(),
+						ws_port = self.socket.config.port,
+						init = nil,
+					}
 					startgame(self, data)
 				else 
 					pprint("[ERROR] FAILED_TO_JOIN_GANME: "..self.gamename)
