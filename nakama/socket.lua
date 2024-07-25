@@ -221,13 +221,12 @@ end
 -- @param socket
 -- @param name
 -- @param callback
-function M.match_create(socket, name, module, callback)
+function M.match_create(socket, name, callback)
 	assert(socket)
 	assert(name == nil or _G.type(name) == 'string')
 	local message = {
 		match_create = {
 			name = name,
-			module = module, 
 		}
 	}
 	return socket_send(socket, message, callback)

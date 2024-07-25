@@ -75,19 +75,22 @@ end
 
 -- ---------------------------------------------------------------------------
 
-local function startgame(self, data)
+local function startgame(self)
 
+	if(self.started or self.game == nil) then return end 
+	self.started = true -- HORRIBLE HACK TO SUPPORT SWAMPY CODEBASE. Will fix later (maybe)
 	self.slimobj = getGameObject(self.game)
 	tanks.createTanks(self.slimobj)
 
 	gGameTime = self.game.time
 
 	-- Apply a fake name to start
-	logtext(self, data["status"])
 	msg.post("/gui-lobby", "gamestart")
 	--pprint(self.game)
 	msg.post("/gui-players", "gamestart", { people = self.game.people, myname = self.player_name })
 	msg.post("/gui-players", "gamename", { gamename = self.game.gamename })
+
+	pprint("------------------>>>> GAME STARTED.")
 end
 
 -- ---------------------------------------------------------------------------
@@ -260,25 +263,11 @@ local function joingame(self)
 			-- 	end 
 			-- end) 
 
-			nakamamp.join_match(self, self.gamename, chance:string(20), function(joined, gamedata)
+			nakamamp.join_match(self, self.gamename, chance:string(20), function(joined, matchdata)
 				if(joined == true) then 
 					pprint("JOINED_GANME: "..self.gamename)
-					pprint(gamedata)
-					self.game = { 
-						match = gamedata, 
-						name = self.player_name, 
-						gamename = self.gamename,
-						maxsize = 4,
-						people = gamedata.presences,
-						owner = gamedata.owner,
-						private = true,
-						state = {},
-						frame = 0,
-						time = socket.gettime(),
-						ws_port = self.socket.config.port,
-						init = gamedata.init,
-					}
-					startgame(self, data)
+					pprint(matchdata)
+					self.matchdata = matchdata
 				else 
 					pprint("[ERROR] FAILED_TO_JOIN_GANME: "..self.gamename)
 				end
@@ -304,7 +293,7 @@ end
 -- ---------------------------------------------------------------------------
 
 function final(self)
-	if(self.game) then nakamamp.websocket_open(self) end
+
 end
 
 -- ---------------------------------------------------------------------------
@@ -326,29 +315,15 @@ function update(self, dt)
 		tanks.gamedata.time = self.game.time
 	end
 
--- 	if(self.frame % 130 == 0) then 
--- 		if(self.game) then 
--- 			local evt = { event = "REQUEST_PEOPLE", frame = self.game.frame }
--- 			nakamamp.websocket_send(self, sfolk.dumps(evt))
--- 		end
--- 	end
--- 
-	-- Odd timing to make the stepping cycle
-	if(self.frame % 97 == 0) then 
-		if(self.game) then 
-			local evt = { event = "REQUEST_GAME", frame = self.game.frame }
-			nakamamp.websocket_send(self, sfolk.dumps(evt))
-		end
+	if(self.game and self.game.init) then 
+		pprint("------------------>>>> Starting game.")
+		startgame(self)
+	end
+
+	if(self.started) then 
+		updatestates(self)
 	end
 	
--- 	if(self.frame % 10 == 0) then 
--- 		if(self.game) then 
--- 
--- 			local evt = { event = "REQUEST_ROUND", frame = self.game.frame }
--- 			nakamamp.websocket_send(self, sfolk.dumps(evt))
--- 		end
--- 	end
--- 
 	self.frame = self.frame + 1
 end
 
@@ -455,7 +430,7 @@ function on_message(self, message_id, message, sender)
 		self.last_player_move = self.frame
 		local evt = { event = "PLAYER_MOVE", frame = self.frame, data = state }
 		local dsend = sfolk.dumps(evt)
-		nakamamp.websocket_send(self, dsend)
+		-- nakamamp.websocket_send(self, dsend)
 	end 
 	
 	if(message_id == hash("player_shoot") ) then 
@@ -469,7 +444,7 @@ function on_message(self, message_id, message, sender)
 		self.last_player_shoot = self.frame
 		local evt = { event = "PLAYER_SHOOT", frame = self.frame, data = state }
 		local dsend = sfolk.dumps(evt)
-		nakamamp.websocket_send(self, dsend)
+		-- nakamamp.websocket_send(self, dsend)
 	end 
 end
 

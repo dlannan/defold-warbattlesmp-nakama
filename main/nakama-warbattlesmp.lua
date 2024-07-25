@@ -235,13 +235,15 @@ local function join_match(self, match_id, token, match_callback)
 	elseif resp.error then
 		log("[ERROR]"..resp.error.message)		
 		local payload = json.encode({ name = self.gamename, uid = self.player_name })
-		pprint(payload)
-		self.match = nakama.rpc_func2(self.client, RPC_DOMATCHCREATE, payload )
-		pprint(self.match)
-		local resp = realtime.match_join(self.socket, self.match.match.match_id)
-		pprint(resp)
-		self.match.owner = self.match.match.self.username
-		match_callback(true, self.match)
+		local resp = nakama.rpc_func2(self.client, RPC_DOMATCHCREATE, payload )
+		realtime.match_join(self.socket, resp.payload, nil, nil, function(data)
+			self.match = data
+			pprint("------------------->>")
+			pprint(self.match)
+			pprint("<<-------------------")
+			self.match.owner = self.player_name
+			match_callback(true, self.match)
+		end)
 	else 
 		match_callback(false, nil)
 	end
@@ -391,7 +393,7 @@ local function send_player_move(match_id, row, col)
 			col = col,
 		})
 		log("Sending match_data message")
-		local result = realtime.match_data_send(socket, match_id, OP_CODE_MOVE, data)
+		local result = realtime.match_data_send(socket, match_id, 1, data)
 		if result.error then
 			log(result.error.message)
 			pprint(result)
@@ -417,11 +419,11 @@ end
 -- ---------------------------------------------------------------------------
 -- handle received match data
 -- decode it and pass it on to the game
-local function handle_match_data(match_data)
+local function handle_match_data(self, match_data)
 	local data = json.decode(match_data.data)
 	local op_code = tonumber(match_data.op_code)
-	if op_code == OP_CODE_STATE then
-		warbattles.match_update(data.state, data.active_player, data.other_player, data.your_turn)
+	if op_code == 2 then
+		self.game = data.state
 	else
 		log(("Unknown opcode %d"):format(op_code))
 	end
@@ -436,6 +438,7 @@ local function handle_match_presence(self, match_presence_event)
 	end
 
 	if match_presence_event.joins then 
+		pprint("------------------------>>>>>>")
 		warbattles.join_match( function(success, message) 
 			pprint(success, message)
 		end)
@@ -624,12 +627,12 @@ local function login(self, callback)
 		-- We parse the data and send it to the game.
 		realtime.on_match_data(self.socket, function(message)
 			log("nakama.on_matchdata")
-			handle_match_data(message.match_data)
+			handle_match_data(self, message.match_data)
 		end)
 
 		-- Normally in xoxo nakama joins are using matchmaker. Because we have a 
 		-- match name, this is not needed. We join directly to the match.
-		warbattles.on_join_match(function(callback)
+		warbattles.on_join_match(function(fn_on_join)
 			log("warbattles.on_join_match")
 		end)
 
