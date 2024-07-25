@@ -25,6 +25,17 @@ OSPathway   = require("lua.opensteer.os-pathway")
 Vec3        = require("lua.opensteer.os-vec")
 
 ---------------------------------------------------------------------------------
+
+local function tcount(t) 
+    local count = 0
+    if(t == nil) then return count end
+    for k,v in pairs(t) do 
+        count = count + 1
+    end 
+    return count
+end
+
+---------------------------------------------------------------------------------
 -- The tank and general game data for a module
 local gamedata = {
 
@@ -169,11 +180,12 @@ local Tank = function( gameobj, gametime )
     -- // (parameter names commented out to prevent compiler warning from "-W")
     self.update = function( elapsedTime, delta) 
 
-        if(self.tobj and go.get(self.tobj, "position")) then 
+        local cpos = go.get(self.tobj, "position")
+        if(self.tobj and cpos) then 
       
             self.dist = self.dist_start + elapsedTime * 14.0 -- self.mover.speed()
-            local pos = self.ospath.mapPathDistanceToPoint(self.dist + 1.0)
 
+            local pos = self.ospath.mapPathDistanceToPoint(self.dist + 1.0)
             local seekTarget = self.mover.xxxsteerForSeek(pos)
             self.mover.applySteeringForce(seekTarget, delta)
  
@@ -189,7 +201,7 @@ end
 -- Create some tanks that follow some paths.
 local function createTanks( gameobj )
     local tanks = {}
-    gameobj.tank_count = table.getn(gameobj.init)
+    gameobj.tank_count = tcount(gameobj.init)
     -- pprint("Tanks: ", gameobj.tank_count, gameobj.time)
     for i,t in ipairs(gameobj.init) do 
         table.insert( tanks, Tank(t, gameobj.time) )
@@ -217,12 +229,21 @@ local function resetTanks( gameobj )
         tank.reset()
     end 
 end
+
+---------------------------------------------------------------------------------
+-- Get a single tank
+local function getTank( tid )
+    return gamedata.tanks[tid]
+end
+
 ---------------------------------------------------------------------------------
 
 return {
     createTanks     = createTanks,
     updateTank      = updateTank,
     resetTanks      = resetTanks,
+
+    getTank         = getTank,
 
     gamedata         = gamedata,
 }

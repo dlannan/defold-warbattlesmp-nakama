@@ -81,6 +81,7 @@ local function startgame(self)
 	self.started = true -- HORRIBLE HACK TO SUPPORT SWAMPY CODEBASE. Will fix later (maybe)
 	self.slimobj = getGameObject(self.game)
 	tanks.createTanks(self.slimobj)
+	self.game.init = nil -- remove init now, since tanks have been created.
 
 	gGameTime = self.game.time
 
@@ -89,8 +90,6 @@ local function startgame(self)
 	--pprint(self.game)
 	msg.post("/gui-players", "gamestart", { people = self.game.people, myname = self.player_name })
 	msg.post("/gui-players", "gamename", { gamename = self.game.gamename })
-
-	pprint("------------------>>>> GAME STARTED.")
 end
 
 -- ---------------------------------------------------------------------------
@@ -101,9 +100,7 @@ local function setname(self, name, callback)
 	self.player_name 	= name
 	self.player_uid 	= self.user_id
 
-	nakamamp.updateaccount( self, function(data) 
-		callback(data)
-	end)
+	callback( {} )
 end
 
 -- ---------------------------------------------------------------------------
@@ -316,7 +313,6 @@ function update(self, dt)
 	end
 
 	if(self.game and self.game.init) then 
-		pprint("------------------>>>> Starting game.")
 		startgame(self)
 	end
 

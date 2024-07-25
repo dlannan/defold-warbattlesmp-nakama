@@ -64,102 +64,12 @@ end
 
 -- ---------------------------------------------------------------------------
 
-local function websocket_callback(self, conn, data)
-	if data.event == websocket.EVENT_DISCONNECTED then
-		pprint("Disconnected: " .. tostring(conn))
-		self.ws_connect = nil
-	elseif data.event == websocket.EVENT_CONNECTED then
-		pprint("Connected: " .. tostring(conn))
-	elseif data.event == websocket.EVENT_ERROR then
-		pprint("Error: '" .. data.message .. "'")
-	elseif data.event == websocket.EVENT_MESSAGE then
-		pprint("Receiving: '" .. tostring(data.message) .. "'")
-	end
-end
-
- ---------------------------------------------------------------------------
--- --  Realtime games should use sockets (UDP ideally)
-
--- function websocket_open(self, callback)
-
--- 	callback = callback or websocket_callback
--- 	self.url = "wss://"..HOST..":"..self.game.ws_port
--- 	local params = {
--- 		timeout = 3000,
--- 	}
--- 	--params.headers = "Sec-WebSocket-Protocol: chat\r\n"
--- 	--params.headers = params.headers.."Origin: mydomain.com\r\n"
-
--- 	self.ws_connect = websocket.connect(self.url, params, callback)
--- end
-
--- ---------------------------------------------------------------------------
--- --  Send data to the server from client (usually movement and keypresses)
--- function websocket_send(self, eventmsg, callback)
-
--- 	if(self.ws_connect == nil) then return nil end 
--- 	--local eventmsg = bser.serialize(eventtbl)
--- 	websocket.send(self.ws_connect, eventmsg)
--- end
-
--- -- ---------------------------------------------------------------------------
-
--- function websocket_close(self)
--- 	if self.ws_connect ~= nil then
--- 		websocket.disconnect(self.ws_connect)
--- 	end
--- end
-
--- ---------------------------------------------------------------------------
--- Check connection when calling swampy funcs
-
--- local function check_connect(self)
-
--- 	local ok = nil
--- 	local resp = { status = "ERROR" } 
--- 	if(self.swp_account == nil) then  resp.status = "Connect Error: No valid swampy account."; return ok, resp end
-
--- 	if(self.swp_client.state == nil) then resp.status = "Connect Error: failed to connect."; return ok, resp end
--- 	if(self.client_id == nil) then  resp.status = "Connect Error: No Client Id."; return ok, resp end
--- 	if(self.user_id == nil) then  resp.status = "Connect Error: No User Id."; return ok, resp end 
--- 	if(self.swp_account == nil) then  resp.status = "Connect Error: No valid swampy account."; return ok, resp end
--- 	ok = true 
--- 	-- Handle other connect issues here
--- 	return ok, resp
--- end
-
--- ---------------------------------------------------------------------------
-
 local function genname(long)
 	long = long or 9
 	local m,c = math.random,("").char 
 	local name = ((" "):rep(long):gsub(".",function()return c(("aeiouy"):byte(m(1,6)))end):gsub(".-",function()return c(m(97,122))end))
 	return name
 end
-
--- -- ---------------------------------------------------------------------------
--- -- Setup server 
--- local function setup_swampy(self, modulename, uid)
-
--- 	swampy.setmodulename(modulename) 
-
--- 	-- The Nakama server configuration
--- 	local config = {}
-
--- 	config.host 		= HOST
--- 	config.port 		= 443
--- 	config.use_ssl 		= true 
--- 	config.api_token 	= "j3mHKlgGZ4" 
-
--- 	self.login_attempts	= 0
--- 	self.gamestate 		= 0
-
--- 	self.user_id		= uid
--- 	self.device_id		= genname(16)
-
--- 	self.swp_client 	= swampy.create_client(config)
--- 	-- pprint(self.swp_client)
--- end
 
 -- ---------------------------------------------------------------------------
 -- authentication using device id
@@ -188,39 +98,7 @@ local function updateplayername( self, match_data )
 	end
 end	
 
--- -- ---------------------------------------------------------------------------
--- local function connect(self, callback)
-
--- 	-- The connect process for the time beiing is to enable an account with user info 
--- 	--  attached to the device the user has and the user generated token they are connecting with.
--- 	self.swp_conn_attempts = (self.swp_conn_attempts or 0) + 1
--- 	if(self.swp_conn_attempts > MAX_CONNECT_ATTEMPTS) then callback({ status = "Connect Error: Exceeded connect attempts." }); return end
-
--- 	self.client_id 		= nil
--- 	self.user_id 		= nil
--- 	self.swp_account 	= nil
-
--- 	if(self.swp_client.state ~= "CONNECTING") then 
--- 		self.swp_client.state = "CONNECTING"
--- 		swampy.connect( self.swp_client, self.player_name, self.device_id, function(rdata)
-
--- 			if(rdata.status == "OK") then 
--- 				self.swp_account = rdata.data
--- 				-- Not sure this is needed anymore (nakama legacy)
--- 				self.client_id = self.swp_account.username 
--- 				self.user_id = self.swp_account.uid
-
--- 				print("Connected ok.")
--- 				self.swp_client.state = "CONNECTED"
--- 			else 
--- 				print("Connect failed.")
--- 				self.swp_client.state = nil
--- 			end
--- 			callback(rdata.status)
--- 		end)
--- 	end
--- end
-
+-- ---------------------------------------------------------------------------
 -- join a match (provided by the matchmaker)
 local function join_match(self, match_id, token, match_callback)
 	self.match = nil
@@ -261,51 +139,6 @@ local function leave_match(match_id)
 	end)
 end
 
--- find an opponent (using the matchmaker)
--- and then join the match
-local function find_opponent_and_join_match(match_callback)
-	
-	realtime.on_matchmaker_matched(socket, function(message)
-		local matched = message.matchmaker_matched
-		if matched and (matched.match_id or matched.token) then
-			join_match(matched.match_id, matched.token, match_callback)
-		else
-			match_callback(nil)
-		end
-	end)
-
-	nakama.sync(function()
-		log("Sending matchmaker_add message")
-		-- find a match with any other player
-		-- make sure the match contains exactly 2 users (min 2 and max 2)
-		local result = realtime.matchmaker_add(socket, 2, 2, "*")
-		if result.error then
-			log(result.error.message)
-			pprint(result)
-			match_callback(nil)
-		end
-	end)
-end
-
--- ---------------------------------------------------------------------------
-local function updateaccount(self, callback)
-
-	local newUsername = self.player_name
-	local display_name = self.player_name
-	local avatar_url = "https://example.com/imposter.png"
-	local lang_tag = "en"
-	local location = ""
-	local timezone = ""
-	
-	local sent = {
-		avatar_url, display_name, lang_tag, location, timezone, newUsername
-	}
-
-	local result = nakama.update_account(self.client, avatar_url, display_name, lang_tag, location, timezone, newUsername)
-	sent.error = result
-	callback(sent)
-end 
-
 -- ---------------------------------------------------------------------------
 -- This is quite slow, only need a small portion of this. Example only.
 local function make_requestgamestate(game_name, device_id) 
@@ -330,46 +163,7 @@ end
 local function updategame(self, callback) 
 
 	if(self.game == nil) then return end 
-
-	local userdata = make_requestgamestate( self.game_name, self.device_id)
-	local data = json.encode(userdata)
-	local message = {
-		socket_send = {
-			data = data,
-		}
-	}
-
-	local op_code = 1
-
-	local result = socket.socket_send(self.socket, message, function(resp)
-		pprint(resp)
-		if (resp.error) then 
-			pprint(resp.error)
-		end
-	
-		if(resp.status == "OK") then 
-			callback(resp.result)
-		else 
-			print("Error updating game: ", resp.results)
-			callback(nil)
-		end 
-	end)
 end 
-
--- -- ---------------------------------------------------------------------------
--- -- An update that doesnt return anything, just keeps connect alive
--- local function pollgame(self) 
-
--- 	local ok, resp = check_connect(self) 
--- 	if(ok == nil) then print(resp.status); return nil end 
-
--- 	local body = make_requestgamestate( self.swp_client, self.game_name, self.device_id )
--- 	body.event = USER_EVENT.POLL
--- 	local bodystr = json.encode(body)
--- 	swampy.game_update( self.swp_client, self.game_name, self.device_id, function(data)
--- 		-- Can do stuff here if you need something to happen ;)
--- 	end, bodystr)
--- end 
 
 -- ---------------------------------------------------------------------------
 
@@ -402,21 +196,6 @@ local function send_player_move(match_id, row, col)
 end
 
 -- ---------------------------------------------------------------------------
-
--- local function reqround(self, callback)
-
--- 	local ok, resp = check_connect(self) 
--- 	if(ok == nil) then callback(resp); return nil end 
-
--- 	local body = make_requestgamestate( self.swp_client, self.game_name, self.device_id )
--- 	body.event = USER_EVENT.REQUEST_ROUND
--- 	local bodystr = bser.serialize(body)
--- 	swampy.game_update( self.swp_client, self.game_name, self.device_id, function(data) 
--- 		callback(data)
--- 	end, bodystr)
--- end 
-
--- ---------------------------------------------------------------------------
 -- handle received match data
 -- decode it and pass it on to the game
 local function handle_match_data(self, match_data)
@@ -438,50 +217,11 @@ local function handle_match_presence(self, match_presence_event)
 	end
 
 	if match_presence_event.joins then 
-		pprint("------------------------>>>>>>")
 		warbattles.join_match( function(success, message) 
 			pprint(success, message)
 		end)
 	end
 end
-
--- ---------------------------------------------------------------------------
-
--- local function reqpeople(self, callback)
-
--- 	local ok, resp = check_connect(self) 
--- 	if(ok == nil) then callback(resp); return nil end 
-
--- 	local body = make_requestgamestate( self.swp_client, self.game_name, self.device_id )
--- 	body.event = USER_EVENT.REQUEST_PEOPLE
--- 	local bodystr = bser.serialize(body)
--- 	swampy.game_update( self.swp_client, self.game_name, self.device_id, function(data) 
--- 		callback(data)
--- 	end, bodystr)
--- end 
-
-
--- ---------------------------------------------------------------------------
-
--- local function waiting(self)
-
--- 	local ok, resp = check_connect(self) 
--- 	if(ok == nil) then print(resp.status); return nil end 
--- 	if(self.game == nil) then pprint("Invalid Game: ", self.game); return end 
-
--- 	local body = make_requestgamestate( self.swp_client, self.game_name, self.device_id )
--- 	body.state = self.game.state or { event = GAME.GAME_JOINING }
--- 	body.event = USER_EVENT.REQUEST_WAITING
--- 	local bodystr = json.encode(body)
--- 	pprint("WAITING: "..tostring(body.state))
--- 	swampy.game_update( self.swp_client, self.game_name, self.device_id, function(data)
-
--- 		-- The game is returned on start - use this for game obj
--- 		if(data.status ~= "OK") then 
--- 			print("Error updating scenario: ", data.results)
--- 		end 
--- 	end, bodystr)
--- end 
 
 -- ---------------------------------------------------------------------------
 
@@ -511,63 +251,8 @@ end
 -- 	end)
 -- end 
 
--- -- ---------------------------------------------------------------------------
--- -- Just a wrapper in case want to insert extra functionality
--- local function findgame( self, gamename, callback )
 
--- 	local ok, resp = check_connect(self) 
--- 	if(ok == nil) then callback(resp); return nil end 
-
--- 	swampy.game_find( self.swp_client, gamename, self.device_id, callback, nil )
--- end
-
--- -- ---------------------------------------------------------------------------
--- -- Just a wrapper in case want to insert extra functionality
--- local function creategame( self, gamename, callback )
-
--- 	local ok, resp = check_connect(self) 
--- 	if(ok == nil) then callback(resp); return nil end 
-
--- 	local limit = 10 -- 10 players - this is not being used in MyGame.
--- 	swampy.game_create( self.swp_client, gamename, self.device_id, limit, function(data)
--- 		self.game_name = gamename 
--- 		callback(data)
--- 	end )
--- end
-
--- -- ---------------------------------------------------------------------------
-
--- local function joingame( self, gamename, callback )
-
--- 	local ok, resp = check_connect(self) 
--- 	if(ok == nil) then callback(resp); return nil end 
-
--- 	swampy.game_join( self.swp_client, gamename, self.device_id, function(data)
--- 		self.game_name = gamename 
--- 		callback(data)
--- 	end, nil )
--- end
-
--- -- ---------------------------------------------------------------------------
-
--- local function leavegame( self, gamename, callback )
-
--- 	local ok, resp = check_connect(self) 
--- 	if(ok == nil) then callback(resp); return nil end 
-
--- 	swampy.game_leave( self.swp_client, gamename, self.device_id, callback, nil )
--- end
-
--- -- ---------------------------------------------------------------------------
-
--- local function closegame( self, gamename, callback )
-
--- 	local ok, resp = check_connect(self) 
--- 	if(ok == nil) then callback(resp); return nil end 
-
--- 	swampy.game_close( self.swp_client, gamename, self.device_id, callback, nil )
--- end
-
+-- ---------------------------------------------------------------------------
 -- login to Nakama
 -- setup listeners
 -- * socket events from Nakama
@@ -660,34 +345,9 @@ return {
 	-- setup 			= setup_swampy,
 	login 			= login,
 	-- connect 		= connect,
-	updateaccount 	= updateaccount,
 	resetclient		= resetclient,
 
-	-- websocket_open	= websocket_open,
-	-- websocket_close = websocket_close,
-	-- websocket_send	= websocket_send,
-		
 	join_match		= join_match,
-
-	-- creategame 		= creategame,
-	-- findgame		= findgame,
-	-- joingame		= joingame,
-	-- leavegame		= leavegame,
-	-- closegame		= closegame,
-
-	-- updategame		= updategame,
-	-- pollgame		= pollgame,
-	-- doupdate		= doupdate,
-	-- updateready		= updateready,
-	-- startgame		= startgame,
-	-- exitgame		= exitgame,
-
-	-- sendplayerdata	= sendplayerdata,
-
-	-- reqround 		= reqround,
-	-- reqpeople 		= reqpeople,
-
-	-- waiting 		= waiting,
 
 	EVENT 			= USER_EVENT,
 }
