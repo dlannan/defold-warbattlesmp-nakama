@@ -15,8 +15,11 @@ local utils  			= require "lua.utils"
 local MAX_LOGIN_ATTEMPTS		= 10
 local MAX_CONNECT_ATTEMPTS 		= 10 
 
-local HOST 						= "swampy.kakutai.com"
+local MODULE_NAME 				= "warbattlesmp_match"
+local HOST 						= "nakama.kakutai.com"
 local PORT 						= 7350
+
+local RPC_DOMATCHCREATE 		= "DoMatchCreate"
 
 -- ---------------------------------------------------------------------------
 -- Game level states.
@@ -163,14 +166,14 @@ end
 local function device_login(client)
 	-- login using the token and create an account if the user
 	-- doesn't already exist
-	local result = nakama.authenticate_device(client, defold.uuid(), nil, true)
-	if result.token then
+	local auth = nakama.authenticate_device(client, defold.uuid(true), nil, true)
+	if auth and auth.token then
 		-- store the token and use it when communicating with the server
-		nakama.set_bearer_token(client, result.token)
-		return true
+		nakama.set_bearer_token(client, auth.token)
+		return true, auth
 	end
 	log("Unable to login")
-	return false
+	return false, auth
 end
 
 -- ---------------------------------------------------------------------------
@@ -225,17 +228,16 @@ local function join_match(self, match_id, token, match_callback)
 	local metadata = { some = "1" }
 
 	local resp = realtime.match_join(self.socket, match_id)
-	pprint(resp)
 	if resp.match then
-		pprint(resp)
 		self.match = resp.match
 		self.match.owner = nil
 		match_callback(true, self.match)
 	elseif resp.error then
-		log("[ERROR]"..resp.error.message)
-		pprint("[ERROR]",resp)
-		
-		self.match = realtime.match_create(self.socket, self.gamename)
+		log("[ERROR]"..resp.error.message)		
+		local payload = json.encode({ name = self.gamename, uid = self.player_name })
+		pprint(payload)
+		self.match = nakama.rpc_func2(self.client, RPC_DOMATCHCREATE, payload )
+		pprint(self.match)
 		local resp = realtime.match_join(self.socket, self.match.match.match_id)
 		pprint(resp)
 		self.match.owner = self.match.match.self.username
@@ -244,7 +246,6 @@ local function join_match(self, match_id, token, match_callback)
 		match_callback(false, nil)
 	end
 end
-
 
 -- leave a match
 local function leave_match(match_id)
@@ -589,13 +590,14 @@ local function login(self, callback)
 		-- Start by doing a device login (the login will be tied
 		-- not to a specific user but to the device the game is
 		-- running on)
-		local ok = device_login(self.client)
+		local ok, auth = device_login(self.client)
 		if not ok then
 			callback(false, "Unable to login")
 			return
 		end
 
 		-- the logged in account
+		self.auth = auth
 		self.account = nakama.get_account(self.client)
 
 		-- Next we create a socket connection as well

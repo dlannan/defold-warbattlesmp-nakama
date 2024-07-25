@@ -9,6 +9,7 @@ local b64 = require "nakama.util.b64"
 local uri = require "nakama.util.uri"
 local json = require "nakama.util.json"
 local uuid = require "nakama.util.uuid"
+local md5 = require "lua.md5"
 
 local b64_encode = b64.encode
 local b64_decode = b64.decode
@@ -35,12 +36,16 @@ end
 
 --- Returns a UUID from the device's mac address.
 -- @return The UUID string.
-function M.uuid()
+function M.uuid(use_md5)
 	local mac = get_mac_address()
 	if not mac then
 		log("Unable to get hardware mac address for UUID")
 	end
-	return uuid(mac)
+	if(use_md5) then 
+		return md5.sumhexa(mac)
+	else
+		return uuid(mac)
+	end
 end
 
 
@@ -212,9 +217,9 @@ function M.socket_send(socket, message, callback)
 	local data = json.encode(message)
 	pprint(data)
 	-- Fix encoding of match_create and status_update messages to send {} instead of []
-	if message.match_create ~= nil or message.status_update ~= nil then
-		data = string.gsub(data, "%[%]", "{}")
-	end
+	-- if message.match_create ~= nil or message.status_update ~= nil then
+	-- 	data = string.gsub(data, "%[%]", "{}")
+	-- end
 
 	local options = {
 		type = websocket.DATA_TYPE_TEXT
