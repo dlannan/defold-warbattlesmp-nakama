@@ -23,57 +23,7 @@ end
 
 local M = {}
 
-local function index_to_row_column(index)
-	local row = math.ceil(index / 3)
-	local column = 1 + ((index - 1) % 3)
-	return row, column
-end
-
-local function check_match(cells)
-	local match = cells[1] ~= -1 and cells[1] == cells[2] and cells[1] == cells[3]
-	if match then
-		return cells[1]
-	end
-end
-
-local function check_winner(state)
-	local cells = state.cells
-	local match_row =
-	check_match(cells[1]
-	or check_match(cells[2])
-	or check_match(cells[3]))
-
-	local match_column =
-	-- down
-	check_match({ cells[1][1], cells[2][1], cells[3][1] })
-	or check_match({ cells[1][2], cells[2][2], cells[3][2] })
-	or check_match({ cells[1][3], cells[2][3], cells[3][3] })
-	-- across
-	or check_match({ cells[1][1], cells[1][2], cells[1][3] })
-	or check_match({ cells[2][1], cells[2][2], cells[2][3] })
-	or check_match({ cells[3][1], cells[3][2], cells[3][3] })
-
-	local match_cross =
-	check_match({ cells[1][1], cells[2][2], cells[3][3] })
-	or check_match({ cells[3][1], cells[2][2], cells[1][3] })
-
-	local won = match_row or match_column or match_cross
-	return won
-end
-
-local function check_draw(state)
-	local cells = state.cells
-	for i=1,9 do
-		local row, column = index_to_row_column(i)
-		if cells[row][column] == -1 then
-			return false
-		end
-	end
-	return true
-end
-
 local function create_state(state)
-	print("------------->")
 	pprint(state)
 	return warbattles.creategame(state.uid, state.name)
 end

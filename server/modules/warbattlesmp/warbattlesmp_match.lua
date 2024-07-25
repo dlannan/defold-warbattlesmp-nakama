@@ -85,6 +85,7 @@ end
 function M.match_loop(context, dispatcher, tick, gamestate, messages)
     nk.logger_info("match_loop")
     gamestate.frame = gamestate.frame + 1
+    gamestate.time = gamestate.frame
 
     for _, message in ipairs(messages) do
         nk.logger_info(string.format("Received %s from %s", message.data, message.sender.username))
@@ -122,12 +123,6 @@ function M.match_terminate(context, dispatcher, tick, gamestate, grace_seconds)
     local message = "Server shutting down in " .. grace_seconds .. " seconds"
     dispatcher.broadcast_message(2, message)
     return nil
-end
-
-function M.init(context, params)
-
-    nk.logger_info("---------------> module initialized")
-    return true
 end
 
 return M
