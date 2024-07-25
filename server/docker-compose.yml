@@ -29,7 +29,7 @@ services:
           echo 'test:nakamatest' | chpasswd &&
           service ssh start &&
           /nakama/nakama migrate up --database.address root@cockroachdb:26257 &&
-          exec /nakama/nakama --name nakama1 --console.username admin --console.password 2170101Nakama! --database.address root@cockroachdb:26257 --logger.level DEBUG --session.token_expiry_sec 7200 --metrics.prometheus_port 9100 --runtime.path /nakama/data/modules/warbattlesmp
+          exec /nakama/nakama --name nakama1 --console.username admin --console.password nakamaAdmin! --database.address root@cockroachdb:26257 --logger.level DEBUG --session.token_expiry_sec 7200 --metrics.prometheus_port 9100 --runtime.path /nakama/data/modules/warbattlesmp
     restart: "no"
     links:
       - "cockroachdb:db"
