@@ -1,20 +1,20 @@
 
-local nakamamp = require("main.nakama-warbattlesmp")
+local nakamamp 			= require("main.nakama-warbattlesmp")
 
-local chance = require("lua.chance")
-local utils  = require("lua.utils")
-local md5    = require("lua.md5")
+local chance 			= require("lua.chance")
+local utils  			= require("lua.utils")
+local md5    			= require("lua.md5")
 
-local bser 	 = require("lua.binser")
-local sfolk  = require("lua.smallfolk")
-local rlua 	 = require("render.render")
+local bser 	 			= require("lua.binser")
+local sfolk  			= require("lua.smallfolk")
+local rlua 	 			= require("render.render")
 
-local tanks  = require("main.tanks")
+local tanks  			= require("main.tanks")
 
 -- Dodgy fixed point to start with
-local START_POS 	= vmath.vector3(500, 500, 1)
+local START_POS 		= vmath.vector3(500, 500, 1)
 
-local COLOR_WHITE 	= vmath.vector4(1, 1, 1, 1)
+local COLOR_WHITE 		= vmath.vector4(1, 1, 1, 1)
 
 -- ---------------------------------------------------------------------------
 
@@ -269,14 +269,14 @@ local function joingame(self)
 						name = self.player_name, 
 						gamename = self.gamename,
 						maxsize = 4,
-						people = gamedata.match.size,
+						people = gamedata.presences,
 						owner = gamedata.owner,
 						private = true,
 						state = {},
 						frame = 0,
 						time = socket.gettime(),
 						ws_port = self.socket.config.port,
-						init = nil,
+						init = gamedata.init,
 					}
 					startgame(self, data)
 				else 

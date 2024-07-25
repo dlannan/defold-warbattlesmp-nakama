@@ -1,14 +1,15 @@
-local tinsert 	= table.insert
-local tremove 	= table.remove
+local tinsert 			= table.insert
+local tremove 			= table.remove
 
-local bser 		= require "lua.binser"
+local bser 				= require "lua.binser"
 
-local warbattles = require "main.warbattles"
-local nakama = require "nakama.nakama"
-local realtime = require "nakama.socket"
-local log = require "nakama.util.log"
-local defold = require "nakama.engine.defold"
-local json = require "nakama.util.json"
+local warbattles 		= require "main.warbattles"
+local nakama 			= require "nakama.nakama"
+local realtime 			= require "nakama.socket"
+local log 				= require "nakama.util.log"
+local defold 			= require "nakama.engine.defold"
+local json 				= require "nakama.util.json"
+local utils  			= require "lua.utils"
 
 -- Some general settings. This is game specific.
 local MAX_LOGIN_ATTEMPTS		= 10
@@ -223,19 +224,20 @@ local function join_match(self, match_id, token, match_callback)
 	log("Sending match_join message")
 	local metadata = { some = "1" }
 
-	local resp = realtime.match_join(self.socket, match_id, nil, metadata)
+	local resp = realtime.match_join(self.socket, match_id)
 	pprint(resp)
 	if resp.match then
 		pprint(resp)
 		self.match = resp.match
-		self.match.owner = resp.match.match_id
+		self.match.owner = nil
 		match_callback(true, self.match)
 	elseif resp.error then
 		log("[ERROR]"..resp.error.message)
 		pprint("[ERROR]",resp)
 		
 		self.match = realtime.match_create(self.socket, self.gamename)
-		pprint(self.match)
+		local resp = realtime.match_join(self.socket, self.match.match.match_id)
+		pprint(resp)
 		self.match.owner = self.match.match.self.username
 		match_callback(true, self.match)
 	else 
@@ -301,45 +303,55 @@ local function updateaccount(self, callback)
 	callback(sent)
 end 
 
--- -- ---------------------------------------------------------------------------
--- -- This is quite slow, only need a small portion of this. Example only.
--- local function make_requestgamestate(client, game_name, device_id) 
+-- ---------------------------------------------------------------------------
+-- This is quite slow, only need a small portion of this. Example only.
+local function make_requestgamestate(game_name, device_id) 
 
--- 	-- User submission data must be in this format - will be checked
--- 	local userdata = {
+	-- User submission data must be in this format - will be checked
+	local userdata = {
 
--- 		state       = nil,   
--- 		uid         = device_id,
--- 		name        = game_name,
--- 		round       = 0,
--- 		timestamp   = os.time(),
+		state       = nil,   
+		uid         = device_id,
+		name        = game_name,
+		round       = 0,
+		timestamp   = os.time(),
 
--- 		event       = USER_EVENT.REQUEST_GAME,
--- 		json        = "",
--- 	}
--- 	return userdata
--- end 
+		event       = USER_EVENT.REQUEST_GAME,
+		json        = "",
+	}
+	return userdata
+end 
 
--- -- ---------------------------------------------------------------------------
--- -- A normal updategame does a "request_round" event with no other data sent
--- local function updategame(self, callback) 
+-- ---------------------------------------------------------------------------
+-- A normal updategame does a "request_round" event with no other data sent
+local function updategame(self, callback) 
 
--- 	local ok, resp = check_connect(self) 
--- 	if(ok == nil) then callback(resp); return nil end 
--- 	if(self.game == nil) then return end 
+	if(self.game == nil) then return end 
 
--- 	local body = make_requestgamestate( self.swp_client, self.game_name, self.device_id)
--- 	local bodystr = json.encode(body)
--- 	swampy.game_update( self.swp_client, self.game_name, self.device_id, function(data)
+	local userdata = make_requestgamestate( self.game_name, self.device_id)
+	local data = json.encode(userdata)
+	local message = {
+		socket_send = {
+			data = data,
+		}
+	}
 
--- 		if(data.status == "OK") then 
--- 			callback(data.result)
--- 		else 
--- 			print("Error updating game: ", data.results)
--- 			callback(nil)
--- 		end 
--- 	end, bodystr)
--- end 
+	local op_code = 1
+
+	local result = socket.socket_send(self.socket, message, function(resp)
+		pprint(resp)
+		if (resp.error) then 
+			pprint(resp.error)
+		end
+	
+		if(resp.status == "OK") then 
+			callback(resp.result)
+		else 
+			print("Error updating game: ", resp.results)
+			callback(nil)
+		end 
+	end)
+end 
 
 -- -- ---------------------------------------------------------------------------
 -- -- An update that doesnt return anything, just keeps connect alive
@@ -417,9 +429,15 @@ end
 -- ---------------------------------------------------------------------------
 -- handle when a player leaves the match
 -- pass this on to the game
-local function handle_match_presence(match_presence_event)
+local function handle_match_presence(self, match_presence_event)
 	if match_presence_event.leaves and #match_presence_event.leaves > 0 then
 		warbattles.opponent_left()
+	end
+
+	if match_presence_event.joins then 
+		warbattles.join_match( function(success, message) 
+			pprint(success, message)
+		end)
 	end
 end
 
@@ -597,7 +615,7 @@ local function login(self, callback)
 		-- We notify the game that the opponent has left.
 		realtime.on_match_presence_event(self.socket, function(message)
 			log("nakama.on_matchpresence")
-			handle_match_presence(message.match_presence_event)
+			handle_match_presence(self, message.match_presence_event)
 		end)
 
 		-- Called by Nakama when the game state has changed.
@@ -607,14 +625,10 @@ local function login(self, callback)
 			handle_match_data(message.match_data)
 		end)
 
-		-- This will get called by the game when the player pressed the
-		-- Join button in the menu.
-		-- We add the logged in player to the matchmaker and join a match
-		-- once one is found. We then call the provided callback to let the
-		-- game know that it can proceed into the game
+		-- Normally in xoxo nakama joins are using matchmaker. Because we have a 
+		-- match name, this is not needed. We join directly to the match.
 		warbattles.on_join_match(function(callback)
 			log("warbattles.on_join_match")
-			find_opponent_and_join_match(callback)
 		end)
 
 		-- Called by the game when the player pressed the Leave button

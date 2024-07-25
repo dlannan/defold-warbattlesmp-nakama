@@ -17,7 +17,6 @@ end
 -- called by xoxo when player wants to join a match
 function M.join_match(callback)
 	assert(on_join_match_fn, "You must call xoxo.on_join_match() from your backend proxy")
-	callback = wrap(callback)
 	on_join_match_fn(function(success, message)
 		assert(success ~= nil)
 		assert(success or message)
