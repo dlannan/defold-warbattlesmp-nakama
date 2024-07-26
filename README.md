@@ -1,11 +1,11 @@
 # defold-warbattlesmp-nakama
 A multiplayer version of warbattles using nakama and direct match connection using a match name.
 
-The matches will be limited to 4 players (to keep performance reasonable).
+The matches are limited to 4 players (to keep performance reasonable). This can be modified.
 
-The Server code is in the Server folder: server/modules
+The server code is in the server folder: server/modules
 
-Additionally a docker0-compose.yml file is provided that starts up a compelte nakama server ready for use with an added OpenSSH server included so you can ssh into the running Nakama Server and examine logs, upload modules and so on. 
+Additionally, a docker-compose.yml file is provided that starts up a complete nakama server ready for use with an added OpenSSH server included so you can ssh into the running Nakama Server and examine logs, upload modules and so on. 
 
 ## SWAMPY
 
@@ -15,7 +15,7 @@ Client: https://github.com/dlannan/defold-warbattlesmp
 
 Server: https://github.com/dlannan/swampy
 
-SWAMPY is a a work in progress server. And is currently undergoing some core changes where all running game modules will run in their own process with their own restricted lua environment. This makes SWAMPY quite secure, as well as being very flexible.
+SWAMPY is a a work in progress game server. And is currently undergoing some core changes where all running game modules will run in their own process with their own restricted lua environment. This makes SWAMPY quite secure, as well as being very flexible.
 
 With the above in mind, it is important to note that alot of the code has been "adjusted" to work with Nakama and is probably not always optimally designed to work with Nakama. The core idea of this project is to provide a complete sample of a realtime (or near realtime) game that can be used with Nakama, including server code.
 
@@ -23,13 +23,13 @@ With the above in mind, it is important to note that alot of the code has been "
 
 The main structure of the game is:
 - User starts app
-- Game name is generated or it can be entered (to join a game)
+- Game name is auto generated or it can be entered (to join a game)
 - User name is auto generated (its easy enough to add a panel to modify the user name as an exercise for the developer)
-- User connects to or creates a game. The client will request to create a game with the given name if it cannot find one to connect to. This uses RPC, because I didnt want to use any match-making services.
+- User connects to or creates a game. The client will request to create a game with the given name if it cannot find one to connect to. This uses RPC, because I didnt want to use any match-making services in Nakama (its not really suited to direct game connects).
 - Once connected the game sends initializers for where the tanks were started (so the client can do the same) and begins sending updates 1 per second in the main loop on the server. 
 - The main loop does _not_ update all player states all the time. All player events are separately broadcast depending on the event types.
 - As the player moves, the server is updated, and then the server updates other players. Sometimes these updates are coalesced to minimize server output. 
-- Weapons and explostions are events that are simulated local and sent to other players. The server decides on any state conflicts. ie if player X beats player Y to destroy a tank. 
+- Weapons and explostions are events that are simulated locally and sent to other players. The server decides on any state conflicts. ie if player X beats player Y to destroy a tank. 
 
 The whole game is intended as a simplistic demo, not a completed game.
 However, there should be enough example code of how to do many different network related operations on both client and server so as to help people to develop complete game code themselves.
