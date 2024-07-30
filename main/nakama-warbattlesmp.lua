@@ -116,9 +116,6 @@ local function join_match(self, match_id, token, match_callback)
 		local resp = nakama.rpc_func2(self.client, RPC_DOMATCHCREATE, payload )
 		realtime.match_join(self.socket, resp.payload, nil, nil, function(data)
 			self.match = data
-			pprint("------------------->>")
-			pprint(self.match)
-			pprint("<<-------------------")
 			self.match.owner = self.player_name
 			match_callback(true, self.match)
 		end)
@@ -190,6 +187,23 @@ local function send_player_move(match_id, row, col)
 		local result = realtime.match_data_send(socket, match_id, 1, data)
 		if result.error then
 			log(result.error.message)
+			pprint(result)
+		end
+	end)
+end
+
+-- ---------------------------------------------------------------------------
+-- Send data to the main game loop
+--  	update state - player move, player shoot, and player exit
+
+local function send_data(self, data)
+
+	nakama.sync(function()
+		local op_code = USER_EVENT[data.event]
+		local result = realtime.match_data_send(self.socket, self.match.match.match_id, op_code, data)
+
+		if result.error then
+			print(result.error.message)
 			pprint(result)
 		end
 	end)
@@ -349,6 +363,7 @@ return {
 
 	join_match		= join_match,
 
+	send_data	= send_data,
 	EVENT 			= USER_EVENT,
 }
 

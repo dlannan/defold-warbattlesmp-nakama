@@ -426,7 +426,7 @@ function on_message(self, message_id, message, sender)
 		self.last_player_move = self.frame
 		local evt = { event = "PLAYER_MOVE", frame = self.frame, data = state }
 		local dsend = sfolk.dumps(evt)
-		-- nakamamp.websocket_send(self, dsend)
+		nakamamp.send_data(self, dsend)
 	end 
 	
 	if(message_id == hash("player_shoot") ) then 
@@ -440,7 +440,7 @@ function on_message(self, message_id, message, sender)
 		self.last_player_shoot = self.frame
 		local evt = { event = "PLAYER_SHOOT", frame = self.frame, data = state }
 		local dsend = sfolk.dumps(evt)
-		-- nakamamp.websocket_send(self, dsend)
+		nakamamp.send_data(self, dsend)
 	end 
 end
 
