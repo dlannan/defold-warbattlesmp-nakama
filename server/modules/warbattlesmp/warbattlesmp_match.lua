@@ -1,48 +1,13 @@
 
-local warbattlesmp  = require("warbattlesmp_state")
-local warbattles    = require("warbattlesmp")
-local nk = require("nakama")
+local nk            = require("nakama")
+local utils         = require("utils")
+local warbattle     = require("warbattlesmp")
 
 local OP_CODE_MOVE = 1
 local OP_CODE_STATE = 2
 
-local M = {}
-
-local function tcount(t) 
-	local count = 0
-	if(t == nil) then return count end
-	for k,v in pairs(t) do 
-		count = count + 1
-	end 
-	return count
-end
-
-local function tclean(t)
-    if type(t) == "table" then
-        for k,v in pairs(t) do
-            if(type(v) == "table") then 
-                t[k] = tclean(v)
-            elseif(type(v) == "function") then 
-                t[k] = nil               
-            end
-        end
-        return t
-    end
-end
-
-local function pprint(t)
-    if type(t) ~= "table" then
-        nk.logger_info(tostring(t))
-    else
-        for k,v in pairs(t) do
-            if(type(v) == "table") then 
-                pprint(v)
-            else 
-                nk.logger_info(string.format("%s = %s", tostring(k), tostring(v)))
-            end
-        end
-    end
-end
+local M = {
+}
 
 local function broadcast_gamestate_to_recipient(dispatcher, gamestate, recipient)
     nk.logger_info("broadcast_gamestate")
@@ -55,10 +20,11 @@ end
 
 function M.match_init(context, setupstate)
     nk.logger_info("match_init")
-    local gamestate = warbattlesmp.new_game(setupstate)
+    M.gamestate = warbattle.creategame(setupstate.uid, setupstate.gamename)
+    nk.localcache_put("warbattle", warbattle, 0)
     local tickrate = 1 -- per sec
-    local label = gamestate.gamename
-    return gamestate, tickrate, label
+    local label = M.gamestate.gamename
+    return M.gamestate, tickrate, label
 end
 
 function M.match_join_attempt(context, dispatcher, tick, gamestate, presence, metadata)
@@ -70,7 +36,7 @@ end
 function M.match_join(context, dispatcher, tick, gamestate, presences)
     nk.logger_info("match_join")
     gamestate.people = presences
-    if warbattlesmp.player_count(gamestate) == 4 then
+    if tcount(presences) == 4 then
         -- broadcast_gamestate(dispatcher, gamestate)
     end
     return gamestate
@@ -84,17 +50,14 @@ end
 
 function M.match_loop(context, dispatcher, tick, gamestate, messages)
     nk.logger_info("match_loop")
+    local warbattle = nk.localcache_get("warbattle")
     gamestate.frame = gamestate.frame + 1
     gamestate.time = gamestate.frame
 
-    for _, message in ipairs(messages) do
-        nk.logger_info(string.format("Received %s from %s", message.data, message.sender.username))
-    end
-
-    local newgamestate = warbattles.updategame( gamestate )
+    local newgamestate = warbattle.updategame( gamestate )
 
     for _, presence in ipairs(gamestate.people) do
-        -- warbattlesmp.add_player(gamestate, presence)
+        -- warbattle.add_player(gamestate, presence)
         broadcast_gamestate_to_recipient(dispatcher, gamestate, presence)
     end
 
@@ -106,7 +69,7 @@ function M.match_loop(context, dispatcher, tick, gamestate, messages)
     if gamestate.rematch_countdown then
         gamestate.rematch_countdown = gamestate.rematch_countdown - 1
         if gamestate.rematch_countdown == 0 then
-            gamestate = warbattlesmp.rematch(gamestate)
+            gamestate = warbattle.creategame(gamestate.uid, gamestate.name)
         end
         -- broadcast_gamestate(dispatcher, gamestate)
     end
@@ -115,7 +78,8 @@ function M.match_loop(context, dispatcher, tick, gamestate, messages)
 end
 
 function M.match_signal(context, dispatcher, tick, state, data)
-	return state, "signal received: " .. data
+	
+    return state, "signal received: "
 end
 
 function M.match_terminate(context, dispatcher, tick, gamestate, grace_seconds)

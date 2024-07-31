@@ -2,6 +2,9 @@
 ---------------------------------------------------------------------------------
 -- A name for the game. 
 local modulename        = "WarBattlesMP"
+local utils             = require("utils")
+
+local nk    = require("nakama")
 
 OSVehicle   = require("opensteer.os-simplevehicle")
 OSPathway   = require("opensteer.os-pathway")
@@ -386,6 +389,29 @@ warbattlempgame.creategame   = function( uid, name )
     return getGameObject(gameobj)
 end 
 
+
+---------------------------------------------------------------------------------
+-- Process incoming messages from clients
+--     Check for consistency (for bullets, collisions and explosions)
+--     Send moves out to alll (this will happen in update)
+warbattlempgame.processmessage   =  function( name, message )
+
+    -- get this game assuming you stored it :) and then do something 
+    local game =  warbattlempgame.data.games[name] 
+    if(game == nil) then return nil end 
+
+    local data =  message
+    if(data.event == USER_EVENT.PLAYER_MOVE) then 
+
+        pprint("------------> PLAYER_MOVING")
+    elseif (data.event == USER_EVENT.PLAYER_HIT) then 
+
+        pprint("------------> PLAYER_HIT")
+    elseif (data.event == USER_EVENT.PLAYER_SHOOT) then 
+
+        pprint("------------> PLAYER_SHOOT")
+    end
+end
 
 ---------------------------------------------------------------------------------
 -- Update provides feedback data to an update request from a game client. 

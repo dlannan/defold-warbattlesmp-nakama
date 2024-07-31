@@ -1,66 +1,47 @@
---[[
-  Copyright 2020 The Defold Foundation Authors & Contributors
 
-  Licensed under the Apache License, Version 2.0 (the "License");
-  you may not use this file except in compliance with the License.
-  You may obtain a copy of the License at
+local nk                = require("nakama")
+-- Main warbattles global lua state (not sure if this is valid, might need stoprage obj)
+local utils             = require("utils")
+local modulename        = "warbattlesmp_match"
 
-  http://www.apache.org/licenses/LICENSE-2.0
+local ERROR = {
+    OK          = "ERROR_OK",
+    BADDATA     = "ERROR_BAD_DATA",
+}
 
-  Unless required by applicable law or agreed to in writing, software
-  distributed under the License is distributed on an "AS IS" BASIS,
-  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-  See the License for the specific language governing permissions and
-  limitations under the License.
-]]--
-
-local nk = require("nakama")
-
-local modulename = "warbattlesmp_match"
-
-
-local function pprint(t)
-    if type(t) ~= "table" then
-        nk.logger_info(tostring(t))
-    else
-        for k,v in pairs(t) do
-            nk.logger_info(string.format("%s = %s", tostring(k), tostring(v)))
-        end
-    end
-end
-
-local function log(fmt, ...)
-    nk.logger_info(string.format(fmt, ...))
-end
-
--- callback when two players have been matched
--- create a match with match logic from tictactoe_match.lua
--- return match id
+-- Manually create a match with RPC call - this bypasses normal match making which isnt
+--   needed for this demo
 local function domatchcreate(context, payload)
-    log("Creating WarBattles match")
+    -- Only declare once?
+    plog("Creating WarBattles match")
     local data = nk.json_decode(context.query_params.payload[1])
-
-    if(data) then pprint(data) end
     local matchid = nk.match_create(modulename, data)
     return matchid
 end
 
-local function authcustom(context, inData)
-    log("WarBattles Custom Auth")
+-- Send data directly to the warbattles state machine.
+--   This way we dont have to 'wait' for data to coalesence and send back in match_loop (slow)
+--   Once warbattles 'state' reaches a coalesence threshold, then broadcast to the other players
+--   The aim of this is if there are many messages happening per match loop then they can be processed
+--   fast enough to not need too much predicion. An alternate implementation (may do later) is
+--   to include prediction in this call to warbattles and thus have more accurate collision and 
+--   movement results (this would also require a more input device based message events)
+local function sendmatchdata(context, payload)
 
-    local token = inData.GetAccount().GetId()
-    inData.Account.Id = "1234567"
-
-    return inData, nil
+    local data = nk.json_decode(context.query_params.payload[1])
+    local match = nk.match_get(data.match_id)
+    pprint(match)
+    if(data) then 
+        local warbattle = nk.localcache_get("warbattle")
+        warbattle.processmessage(data.gamename, data)
+    else
+        return ERROR.BADDATA
+    end
+    return ERROR.OK
 end
 
-nk.run_once(function(ctx)
-    local now = os.time()
-    log("Backend loaded at %d", now)
-    -- nk.register_rt_before(authcustom, "AuthenticateCustom")
-end)
-
 nk.register_rpc(domatchcreate, "DoMatchCreate")
+nk.register_rpc(sendmatchdata, "SendMatchData")
 
 -- Manually auth a device id (not sure if this works)
 nk.authenticate_device("c1affd14799b725d623b54f15e79f8bc")

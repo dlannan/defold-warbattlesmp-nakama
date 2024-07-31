@@ -20,6 +20,7 @@ local HOST 						= "nakama.kakutai.com"
 local PORT 						= 7350
 
 local RPC_DOMATCHCREATE 		= "DoMatchCreate"
+local RPC_SENDMATCHDATA 		= "SendMatchData"
 
 -- ---------------------------------------------------------------------------
 -- Game level states.
@@ -105,23 +106,26 @@ local function join_match(self, match_id, token, match_callback)
 	log("Sending match_join message")
 	local metadata = { some = "1" }
 
-	local resp = realtime.match_join(self.socket, match_id)
-	if resp.match then
-		self.match = resp.match
-		self.match.owner = nil
-		match_callback(true, self.match)
-	elseif resp.error then
-		log("[ERROR]"..resp.error.message)		
-		local payload = json.encode({ name = self.gamename, uid = self.player_name })
-		local resp = nakama.rpc_func2(self.client, RPC_DOMATCHCREATE, payload )
-		realtime.match_join(self.socket, resp.payload, nil, nil, function(data)
-			self.match = data
-			self.match.owner = self.player_name
+	nakama.sync(function()
+		
+		local resp = realtime.match_join(self.socket, match_id)
+		if resp.match then
+			self.match = resp.match
+			self.match.owner = nil
 			match_callback(true, self.match)
-		end)
-	else 
-		match_callback(false, nil)
-	end
+		elseif resp.error then
+			log("[ERROR]"..resp.error.message)		
+			local payload = json.encode({ gamename = self.gamename, uid = self.player_name })
+			local resp = nakama.rpc_func2(self.client, RPC_DOMATCHCREATE, payload )
+			realtime.match_join(self.socket, resp.payload, nil, nil, function(data)
+				self.match = data
+				self.match.owner = self.player_name
+				match_callback(true, self.match)
+			end)
+		else 
+			match_callback(false, nil)
+		end
+	end)
 end
 
 -- leave a match
@@ -199,12 +203,12 @@ end
 local function send_data(self, data)
 
 	nakama.sync(function()
-		local op_code = USER_EVENT[data.event]
-		local result = realtime.match_data_send(self.socket, self.match.match.match_id, op_code, data)
 
-		if result.error then
-			print(result.error.message)
-			pprint(result)
+		local payload = json.encode(data)
+		local resp = nakama.rpc_func2(self.client, RPC_SENDMATCHDATA, payload )
+		if resp.error then
+			print(resp.error.message)
+			pprint(resp)
 		end
 	end)
 end
@@ -363,7 +367,8 @@ return {
 
 	join_match		= join_match,
 
-	send_data	= send_data,
+	send_data		= send_data,
+	update_game 	= update_game,
 	EVENT 			= USER_EVENT,
 }
 

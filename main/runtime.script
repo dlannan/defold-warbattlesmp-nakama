@@ -382,11 +382,11 @@ function on_message(self, message_id, message, sender)
 	if( message_id== hash("setname") ) then 
 		if(message.name and string.len(message.name)) then 
 			setname(self, message.name, function(data) 
-				nakamamp.updategame( self, function(gamedata)
-					self.game = json.decode(gamedata)
-					-- pprint(gamedata)
+				-- nakamamp.updategame( self, function(gamedata)
+				-- 	self.game = json.decode(gamedata)
+				-- 	-- pprint(gamedata)
 					msg.post("/gui-players", "gamestart", { people = self.game.people })
-				end)
+				-- end)
 			end)
 		end 
 	end
@@ -424,9 +424,15 @@ function on_message(self, message_id, message, sender)
 		--state.lt 		= self.game.frame + 2
 
 		self.last_player_move = self.frame
-		local evt = { event = "PLAYER_MOVE", frame = self.frame, data = state }
-		local dsend = sfolk.dumps(evt)
-		nakamamp.send_data(self, dsend)
+		local evt = { 
+			match_id = self.match.match.match_id, 
+			gamename = self.gamename, 
+			event = nakamamp.EVENT.PLAYER_MOVE, 
+			frame = self.frame, 
+			data = state 
+		}
+		-- local dsend = sfolk.dumps(evt)
+		nakamamp.send_data(self, evt)
 	end 
 	
 	if(message_id == hash("player_shoot") ) then 
@@ -438,9 +444,15 @@ function on_message(self, message_id, message, sender)
 		--state.lt 		= self.game.frame + 2
 		
 		self.last_player_shoot = self.frame
-		local evt = { event = "PLAYER_SHOOT", frame = self.frame, data = state }
-		local dsend = sfolk.dumps(evt)
-		nakamamp.send_data(self, dsend)
+		local evt = { 
+			match_id = self.match.match.match_id, 
+			gamename = self.gamename, 
+			event = nakamamp.EVENT.PLAYER_SHOOT, 
+			frame = self.frame, 
+			data = state 
+		}
+		-- local dsend = sfolk.dumps(evt)
+		nakamamp.send_data(self, evt)
 	end 
 end
 
