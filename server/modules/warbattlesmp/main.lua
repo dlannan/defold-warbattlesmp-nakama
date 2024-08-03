@@ -10,13 +10,40 @@ local ERROR = {
     BADDATA     = "ERROR_BAD_DATA",
 }
 
+-- Helper to find match
+local function CheckForMatch( label )
+    local matches = nk.match_list(10, true, label, 1, 3)
+    local matchid = nil
+    pprint(matches)
+
+    -- Just get the first match. There _shouldnt_ be any duplicate matches.
+    if(matches and #matches > 0) then 
+        matchid = matches[1].match_id
+    end
+    return matchid
+end
+
 -- Manually create a match with RPC call - this bypasses normal match making which isnt
 --   needed for this demo
 local function domatchcreate(context, payload)
     -- Only declare once?
     plog("Creating WarBattles match")
     local data = nk.json_decode(context.query_params.payload[1])
-    local matchid = nk.match_create(modulename, data)
+
+    -- Dont create a match, if there is one with a matching label!!!
+    local matchid = CheckForMatch(data.gamename)
+    if(matchid == nil) then 
+        matchid = nk.match_create(modulename, data)
+    end
+    return matchid
+end
+
+-- A manual join method so I can do simple match name joining rather than using matchmaking mess
+local function domatchjoin(context, payload)
+
+    local data = nk.json_decode(context.query_params.payload[1])
+    plog("Joining Warbattles match: "..tostring(data.label))
+    local matchid = CheckForMatch(data.label)
     return matchid
 end
 
@@ -39,8 +66,9 @@ local function sendmatchdata(context, payload)
     return ERROR.OK
 end
 
-nk.register_rpc(domatchcreate, "DoMatchCreate")
-nk.register_rpc(sendmatchdata, "SendMatchData")
+nk.register_rpc(domatchcreate,  "DoMatchCreate")
+nk.register_rpc(domatchjoin,    "DoMatchJoin")
+nk.register_rpc(sendmatchdata,  "SendMatchData")
 
 -- Manually auth a device id (not sure if this works)
 nk.authenticate_device("c1affd14799b725d623b54f15e79f8bc")

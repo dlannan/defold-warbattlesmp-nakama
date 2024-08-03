@@ -20,10 +20,10 @@ end
 
 function M.match_init(context, setupstate)
     nk.logger_info("match_init")
-    M.gamestate = warbattle.creategame(setupstate.uid, setupstate.gamename)
+    local gamestate = warbattle.creategame(setupstate.uid, setupstate.gamename)
     local tickrate = 1 -- per sec
-    local label = M.gamestate.gamename
-    return M.gamestate, tickrate, label
+    local label = setupstate.gamename
+    return gamestate, tickrate, label
 end
 
 function M.match_join_attempt(context, dispatcher, tick, gamestate, presence, metadata)

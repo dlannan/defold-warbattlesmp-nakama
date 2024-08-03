@@ -20,6 +20,7 @@ local HOST 						= "nakama.kakutai.com"
 local PORT 						= 7350
 
 local RPC_DOMATCHCREATE 		= "DoMatchCreate"
+local RPC_DOMATCHJOIN	 		= "DoMatchJoin"
 local RPC_SENDMATCHDATA 		= "SendMatchData"
 
 -- ---------------------------------------------------------------------------
@@ -107,23 +108,29 @@ local function join_match(self, match_id, token, match_callback)
 
 	nakama.sync(function()
 		
-		local resp = realtime.match_join(self.socket, match_id)
-		if resp.match then
-			self.match = resp.match
-			self.match.owner = nil
-			match_callback(true, self.match)
-		elseif resp.error then
-			log("[ERROR]"..resp.error.message)		
-			local payload = json.encode({ gamename = self.gamename, uid = self.player_name })
-			local resp = nakama.rpc_func2(self.client, RPC_DOMATCHCREATE, payload )
-			realtime.match_join(self.socket, resp.payload, nil, nil, function(data)				
-				self.match = data
-				self.match.owner = self.player_name
-				match_callback(true, self.match)
-			end)
-		else 
-			match_callback(false, nil)
-		end
+		local joindata = json.encode({ label = match_id })
+		local resp = nakama.rpc_func2(self.client, RPC_DOMATCHJOIN, joindata )
+
+		nakama.sync(function()
+			if resp and resp.payload == "" then
+
+				local payload = json.encode({ gamename = self.gamename, uid = self.player_name })
+				local resp = nakama.rpc_func2(self.client, RPC_DOMATCHCREATE, payload )
+				pprint(resp)
+
+				realtime.match_join(self.socket, resp.payload, nil, nil, function(data)				
+					self.match = data
+					self.match.owner = self.player_name
+					match_callback(true, self.match)
+				end)
+			else
+				realtime.match_join(self.socket, resp.payload, nil, nil, function(data)				
+					self.match = data
+					self.match.owner = self.player_name
+					match_callback(true, self.match)
+				end)
+			end
+		end)
 	end)
 end
 
@@ -208,14 +215,7 @@ local function handle_match_notification(self, notifications)
 		local content = json.decode(v.content)
 		-- If this is an init call, then update game data!!!
 		if(v.subject == "PLAYER_JOINED" and content.init) then 
-			-- If its this player we only care about updating init
-			if(content.user_id == self.game.user_id) then 
-				self.game = content 
-
-			-- If this is another player joining, then add them to the game
-			else
-				
-			end
+			self.game = content 
 		elseif(v.subject == "PLAYER_MOVE" and content) then 
 
 		elseif(v.subject == "PLAYER_HIT" and content) then 
