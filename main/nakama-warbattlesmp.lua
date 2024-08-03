@@ -90,14 +90,14 @@ end
 
 -- ---------------------------------------------------------------------------
 -- Update match player name
-local function updateplayername( self, match_data )
+local function setplayername( self, newname )
 
-	for k,user in pairs(self.client_party.people) do 
-		if(user.user_id == match_data.presence.user_id) then 
-			local playerdata = json.decode(match_data.data)
-			user.player_name = playerdata.player_name
-		end
+	local result = nakama.get_account(self.client)
+	if result.error then
+		print(result.message)
+		return
 	end
+	local result = nakama.update_account(self.client, result.avatar_url, newname, result.lang_tag, result.location, result.timezone, newname)
 end	
 
 -- ---------------------------------------------------------------------------
@@ -355,6 +355,7 @@ return {
 	login 			= login,
 	-- connect 		= connect,
 	resetclient		= resetclient,
+	setplayername 	= setplayername,
 
 	join_match		= join_match,
 

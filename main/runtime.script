@@ -99,8 +99,8 @@ local function setname(self, name, callback)
 	self.player_color	= colorgen()
 	self.player_name 	= name
 	self.player_uid 	= self.user_id
-
-	callback( {} )
+	nakamamp.setplayername(self, name)
+	callback({})
 end
 
 -- ---------------------------------------------------------------------------
