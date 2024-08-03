@@ -315,8 +315,12 @@ warbattlempgame.getgameinit = function(uid, name)
     local game = nk.localcache_get("warbattle_"..name)
     if(game == nil) then return nil end 
     local temp = getGameObject(game)
-    temp.init = game.init
-    nk.notification_send(uid, "PLAYER_JOINED", temp, USER_EVENT.REQUEST_GAME, nil, true)
+
+    -- Tell all players there is a new player
+    for k, person in pairs(game.people) do
+        if(person.user_id == uid) then temp.init = game.init else temp.init = nil end
+        nk.notification_send(person.user_id, "PLAYER_JOINED", temp, USER_EVENT.REQUEST_GAME, nil, true)
+    end
     return game.init
 end
 
@@ -416,15 +420,12 @@ warbattlempgame.processmessage   =  function( uid, name, message )
     if(data.event == USER_EVENT.PLAYER_MOVE) then 
 
         subject = "PLAYER_MOVE"
-        pprint("------------> PLAYER_MOVING")
     elseif (data.event == USER_EVENT.PLAYER_HIT) then 
 
         subject = "PLAYER_HIT"
-        pprint("------------> PLAYER_HIT")
     elseif (data.event == USER_EVENT.PLAYER_SHOOT) then 
 
         subject = "PLAYER_SHOOT"
-        pprint("------------> PLAYER_SHOOT")
     end
 
     if(subject) then 
@@ -432,10 +433,9 @@ warbattlempgame.processmessage   =  function( uid, name, message )
         pprint(game.people)
         -- Post this to all players
         for _, presence in ipairs(game.people) do
-            -- if(uid ~= presence.user_id) then  -- Dont send stuff to self
-                pprint("------------> NOTIFY: "..presence.user_id)
+            if(uid ~= presence.user_id) then  -- Dont send stuff to self
                 nk.notification_send(presence.user_id, subject, data, data.event, nil, true)
-            -- end
+            end
         end
     end
 end
