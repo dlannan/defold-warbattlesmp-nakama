@@ -21,7 +21,6 @@ end
 function M.match_init(context, setupstate)
     nk.logger_info("match_init")
     M.gamestate = warbattle.creategame(setupstate.uid, setupstate.gamename)
-    nk.localcache_put("warbattle", warbattle, 0)
     local tickrate = 1 -- per sec
     local label = M.gamestate.gamename
     return M.gamestate, tickrate, label
@@ -30,15 +29,15 @@ end
 function M.match_join_attempt(context, dispatcher, tick, gamestate, presence, metadata)
     nk.logger_info("match_join_attempt")
     local acceptuser = tcount(gamestate.people) < 4
+    if(acceptuser == true) then 
+        gamestate = warbattle.updateperson(gamestate, presence)
+        gamestate.init = warbattle.getgameinit(presence.user_id, gamestate.gamename)
+    end
     return gamestate, acceptuser
 end
 
 function M.match_join(context, dispatcher, tick, gamestate, presences)
     nk.logger_info("match_join")
-    gamestate.people = presences
-    if tcount(presences) == 4 then
-        -- broadcast_gamestate(dispatcher, gamestate)
-    end
     return gamestate
 end
 
@@ -50,31 +49,15 @@ end
 
 function M.match_loop(context, dispatcher, tick, gamestate, messages)
     nk.logger_info("match_loop")
-    local warbattle = nk.localcache_get("warbattle")
     gamestate.frame = gamestate.frame + 1
     gamestate.time = gamestate.frame
 
     local newgamestate = warbattle.updategame( gamestate )
-
-    for _, presence in ipairs(gamestate.people) do
-        -- warbattle.add_player(gamestate, presence)
-        broadcast_gamestate_to_recipient(dispatcher, gamestate, presence)
+    for _, presence in ipairs(newgamestate.people) do
+        broadcast_gamestate_to_recipient(dispatcher, newgamestate, presence)
     end
 
-    -- Clear init after first 10 frames. New players will get sent an init sequence
-    if( gamestate.frame > 10 and gamestate.init ) then 
-        gamestate.init = nil 
-    end
-
-    if gamestate.rematch_countdown then
-        gamestate.rematch_countdown = gamestate.rematch_countdown - 1
-        if gamestate.rematch_countdown == 0 then
-            gamestate = warbattle.creategame(gamestate.uid, gamestate.name)
-        end
-        -- broadcast_gamestate(dispatcher, gamestate)
-    end
-
-    return newgamestate or gamestate
+    return newgamestate
 end
 
 function M.match_signal(context, dispatcher, tick, state, data)

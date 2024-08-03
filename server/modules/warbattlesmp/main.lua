@@ -2,6 +2,7 @@
 local nk                = require("nakama")
 -- Main warbattles global lua state (not sure if this is valid, might need stoprage obj)
 local utils             = require("utils")
+local warbattle         = require("warbattlesmp")
 local modulename        = "warbattlesmp_match"
 
 local ERROR = {
@@ -29,11 +30,9 @@ end
 local function sendmatchdata(context, payload)
 
     local data = nk.json_decode(context.query_params.payload[1])
-    local match = nk.match_get(data.match_id)
-    -- pprint(match)
     if(data) then 
-        local warbattle = nk.localcache_get("warbattle")
-        warbattle.processmessage(data.gamename, data)
+        local match = nk.match_get(data.match_id)
+        warbattle.processmessage(context.user_id, data.gamename, data)
     else
         return ERROR.BADDATA
     end

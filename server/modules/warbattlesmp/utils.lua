@@ -11,9 +11,11 @@ function pprint(t, tabs)
     else
         for k,v in pairs(t) do
             if(type(v) == "table") then 
-                pprint(v, tabs+1)
+                print(string.rep(" ", tabs)..tostring(k).."= {")
+                pprint(v, tabs+2)
+                print(string.rep(" ", tabs).."}")
             else
-                print(string.format(string.rep(" ",tabs).."%s = %s", tostring(k), tostring(v)))
+                print(string.format(string.rep(" ", tabs).."%s = %s,", tostring(k), tostring(v)))
             end
         end
     end

@@ -4,11 +4,11 @@
 local modulename        = "WarBattlesMP"
 local utils             = require("utils")
 
-local nk    = require("nakama")
+local nk                = require("nakama")
 
-OSVehicle   = require("opensteer.os-simplevehicle")
-OSPathway   = require("opensteer.os-pathway")
-Vec3        = require("opensteer.os-vec")
+OSVehicle               = require("opensteer.os-simplevehicle")
+OSPathway               = require("opensteer.os-pathway")
+Vec3                    = require("opensteer.os-vec")
 
 -- General game operation:
 --    Drop in play. Can join any game any time. 
@@ -252,32 +252,6 @@ local function resetTanks( gameobj )
 end
 
 ---------------------------------------------------------------------------------
--- Run an individual game step. 
---   The game operations occur here. Usually:
---     - Check inputs/changes
---     - Apply to game state
---     - Output state changes
---     - Update game sync 
--- 
----------------------------------------------------------------------------------
--- Check state 
-local function checkState( game )
-
-    if(game.state) then 
-        for k,v in ipairs(game.state) do
-
-            -- kill state if lifetime is old
-            if(v and game.frame > v.lt) then 
-                table.remove(game.state, i)
-            end         
-        end 
-        -- Allows client to sync to the module frame
-        game.state.frame = game.frame
-    end 
-end
-
-
----------------------------------------------------------------------------------
 -- Gets a cleaned up gameobject (less data)
 local function getGameObject(gameobj)
 
@@ -293,27 +267,81 @@ local function getGameObject(gameobj)
         time        = gameobj.time,
 
         ws_port     = gameobj.ws_port,
-        init        = gameobj.init,  -- thuis should only happen at start or sync
     }
     return slimobj
 end 
 
 ---------------------------------------------------------------------------------
+-- Run an individual game step. 
+--   The game operations occur here. Usually:
+--     - Check inputs/changes
+--     - Apply to game state
+--     - Output state changes
+--     - Update game sync 
+-- 
+---------------------------------------------------------------------------------
+-- Check state 
+local function checkState( newgamestate )
+
+    -- Push newstate into current game
+    local game = nk.localcache_get("warbattle_"..newgamestate.gamename)
+    for k,v in pairs(newgamestate) do
+        game[k] = v
+    end
+
+    if(game.state) then 
+        for k,v in ipairs(game.state) do
+
+            -- kill state if lifetime is old
+            if(v and game.frame > v.lt) then 
+                table.remove(game.state, i)
+            end         
+        end 
+        -- Allows client to sync to the module frame
+        game.state.frame = game.frame
+    end 
+
+    -- Write back any changes to the cache. This is shitty, would be better to use a lua table 
+    --   Even a global one would be nicer.
+    nk.localcache_put("warbattle_"..game.gamename, game, 0)
+    return game 
+end
+
+---------------------------------------------------------------------------------
+-- Gets the init data for a game (when a player joins)
+warbattlempgame.getgameinit = function(uid, name)
+    
+    if(name == nil) then return nil end
+    local game = nk.localcache_get("warbattle_"..name)
+    if(game == nil) then return nil end 
+    local temp = getGameObject(game)
+    temp.init = game.init
+    nk.notification_send(uid, "PLAYER_JOINED", temp, USER_EVENT.REQUEST_GAME, nil, true)
+    return game.init
+end
+
+---------------------------------------------------------------------------------
+-- Gets the init data for a game (when a player joins)
+warbattlempgame.getgame = function(name)
+    
+    local game =  nk.localcache_get("warbattle_"..name)
+    if(game == nil) then return nil end 
+    return game
+end
+
+
+---------------------------------------------------------------------------------
 -- When number of people change notify all clients 
 
-local function peopleChanged(game)
+warbattlempgame.updateperson = function(game, newperson)
 
-    local msg = { event = "REQUEST_PEOPLE", data = game.people, time = game.time, frame = game.frame }
-    local rpdata = SFolk.dumps(msg)
-    
-    local ws_server = allWSServers[game.gamename]
-    if(ws_server) then 
-        for i,client in ipairs(ws_server.clients) do
-            if(client) then 
-                client:send(rpdata)
-            end
-        end
-    end
+    -- get this game assuming you stored it :) and then do something 
+    local game =  warbattlempgame.getgame(game.gamename) 
+    if(game == nil) then return nil end 
+
+    table.insert(game.people, newperson)
+    nk.localcache_put("warbattle_"..game.gamename, game, 0)
+    return game
 end
 
 ---------------------------------------------------------------------------------
@@ -345,23 +373,6 @@ local function runGameStep( game, frame, dt )
 end 
 
 ---------------------------------------------------------------------------------
--- Main run loop for the module. 
---    There are no real restrictions here. If you lock the runtime,
---    This modules thread will lock. The server may kick the module.
---   dt is in milliseconds
-warbattlempgame.run          = function( mod, frame, dt )
-
-    for k, game in pairs(mod.data.games) do 
-        if(game == nil) then 
-            moduleError("Game Invalid: ", k) 
-        else
-            runGameStep( game, frame, dt )
-        end
-        game.time = game.time + dt
-    end
-end 
-
----------------------------------------------------------------------------------
 -- Create a new game in this module. 
 --    Each game can be tailored as needed.
 warbattlempgame.creategame   = function( uid, name )
@@ -383,9 +394,8 @@ warbattlempgame.creategame   = function( uid, name )
     }
 
     createTanks( gameobj )
-    -- setupWebSocket(gameobj)
 
-    warbattlempgame.data.games[name] = gameobj 
+    nk.localcache_put("warbattle_"..name, gameobj, 0)
     return getGameObject(gameobj)
 end 
 
@@ -394,41 +404,56 @@ end
 -- Process incoming messages from clients
 --     Check for consistency (for bullets, collisions and explosions)
 --     Send moves out to alll (this will happen in update)
-warbattlempgame.processmessage   =  function( name, message )
+warbattlempgame.processmessage   =  function( uid, name, message )
 
     -- get this game assuming you stored it :) and then do something 
-    local game =  warbattlempgame.data.games[name] 
+    local game =  warbattlempgame.getgame(name) 
     if(game == nil) then return nil end 
 
     local data =  message
+    local subject = nil
+
     if(data.event == USER_EVENT.PLAYER_MOVE) then 
 
+        subject = "PLAYER_MOVE"
         pprint("------------> PLAYER_MOVING")
     elseif (data.event == USER_EVENT.PLAYER_HIT) then 
 
+        subject = "PLAYER_HIT"
         pprint("------------> PLAYER_HIT")
     elseif (data.event == USER_EVENT.PLAYER_SHOOT) then 
 
+        subject = "PLAYER_SHOOT"
         pprint("------------> PLAYER_SHOOT")
+    end
+
+    if(subject) then 
+        pprint("[Subject] "..subject)
+        pprint(game.people)
+        -- Post this to all players
+        for _, presence in ipairs(game.people) do
+            -- if(uid ~= presence.user_id) then  -- Dont send stuff to self
+                pprint("------------> NOTIFY: "..presence.user_id)
+                nk.notification_send(presence.user_id, subject, data, data.event, nil, true)
+            -- end
+        end
     end
 end
 
 ---------------------------------------------------------------------------------
 -- Update provides feedback data to an update request from a game client. 
-warbattlempgame.updategame   =  function( name )
+warbattlempgame.updategame   =  function( gamestate )
 
     -- get this game assuming you stored it :) and then do something 
-    local game =  warbattlempgame.data.games[name] 
+    local game =  warbattlempgame.getgame(gamestate.gamename)
     if(game == nil) then return nil end 
 
     local result = nil
     -- -- Cleanup states in case there are old ones 
-    --checkState( game )
-
-    result = getGameObject(game)
+    result = checkState( gamestate )
 
     -- Return some json to players for updates 
-    return result
+    return getGameObject(result)
 end 
 
 
@@ -437,7 +462,7 @@ end
 warbattlempgame.joingame   =  function( uid, name )
 
     -- get this game assuming you stored it :) and then do something 
-    local game =  warbattlempgame.data.games[name] 
+    local game = nk.localcache_get("warbattle_"..name)
     if(game == nil) then return nil end 
 end
 
@@ -446,7 +471,7 @@ end
 warbattlempgame.leavegame   =  function( uid, name )
     
     -- get this game assuming you stored it :) and then do something 
-    local game =  warbattlempgame.data.games[name] 
+    local game = nk.localcache_get("warbattle_"..name)
     if(game == nil) then return nil end 
 end
 
