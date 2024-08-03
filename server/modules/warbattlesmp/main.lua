@@ -30,7 +30,7 @@ local function sendmatchdata(context, payload)
 
     local data = nk.json_decode(context.query_params.payload[1])
     local match = nk.match_get(data.match_id)
-    pprint(match)
+    -- pprint(match)
     if(data) then 
         local warbattle = nk.localcache_get("warbattle")
         warbattle.processmessage(data.gamename, data)

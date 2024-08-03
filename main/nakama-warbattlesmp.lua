@@ -104,7 +104,6 @@ end
 local function join_match(self, match_id, token, match_callback)
 	self.match = nil
 	log("Sending match_join message")
-	local metadata = { some = "1" }
 
 	nakama.sync(function()
 		
@@ -117,7 +116,7 @@ local function join_match(self, match_id, token, match_callback)
 			log("[ERROR]"..resp.error.message)		
 			local payload = json.encode({ gamename = self.gamename, uid = self.player_name })
 			local resp = nakama.rpc_func2(self.client, RPC_DOMATCHCREATE, payload )
-			realtime.match_join(self.socket, resp.payload, nil, nil, function(data)
+			realtime.match_join(self.socket, resp.payload, nil, nil, function(data)				
 				self.match = data
 				self.match.owner = self.player_name
 				match_callback(true, self.match)
@@ -128,6 +127,7 @@ local function join_match(self, match_id, token, match_callback)
 	end)
 end
 
+-- ---------------------------------------------------------------------------
 -- leave a match
 local function leave_match(match_id)
 	nakama.sync(function()
@@ -135,7 +135,7 @@ local function leave_match(match_id)
 		local result = realtime.match_leave(socket, match_id)
 		if result.error then
 			log(result.error.message)
-			pprint(result)
+			-- pprint(result)
 		end
 	end)
 end
@@ -167,19 +167,6 @@ local function updategame(self, callback)
 end 
 
 -- ---------------------------------------------------------------------------
-
--- local function sendplayerdata(self, pstate)
-
--- 	local ok, resp = check_connect(self) 
--- 	if(ok == nil) then callback(resp); return nil end 
-
--- 	local body = make_requestgamestate( self.swp_client, self.game_name, self.device_id )
--- 	body.state = pstate
--- 	body.event = USER_EVENT.PLAYER_STATE
--- 	local bodystr = bser.serialize(body)
--- 	swampy.game_update( self.swp_client, self.game_name, self.device_id, function() end, bodystr)
--- end 
-
 -- send move as match data
 local function send_player_move(match_id, row, col)
 	nakama.sync(function()
@@ -191,7 +178,7 @@ local function send_player_move(match_id, row, col)
 		local result = realtime.match_data_send(socket, match_id, 1, data)
 		if result.error then
 			log(result.error.message)
-			pprint(result)
+			-- pprint(result)
 		end
 	end)
 end
@@ -203,14 +190,40 @@ end
 local function send_data(self, data)
 
 	nakama.sync(function()
-
 		local payload = json.encode(data)
 		local resp = nakama.rpc_func2(self.client, RPC_SENDMATCHDATA, payload )
-		if resp.error then
+		if resp and resp.error then
 			print(resp.error.message)
-			pprint(resp)
+			-- pprint(resp)
 		end
 	end)
+end
+
+-- ---------------------------------------------------------------------------
+-- handle received match data
+-- decode it and pass it on to the game
+local function handle_match_notification(self, notifications)
+
+	for k, v in pairs(notifications.notifications.notifications) do 
+		local content = json.decode(v.content)
+		-- If this is an init call, then update game data!!!
+		if(v.subject == "PLAYER_JOINED" and content.init) then 
+			-- If its this player we only care about updating init
+			if(content.user_id == self.game.user_id) then 
+				self.game = content 
+
+			-- If this is another player joining, then add them to the game
+			else
+				
+			end
+		elseif(v.subject == "PLAYER_MOVE" and content) then 
+
+		elseif(v.subject == "PLAYER_HIT" and content) then 
+
+		elseif(v.subject == "PLAYER_MOVE" and content) then 
+
+		end
+	end
 end
 
 -- ---------------------------------------------------------------------------
@@ -219,8 +232,10 @@ end
 local function handle_match_data(self, match_data)
 	local data = json.decode(match_data.data)
 	local op_code = tonumber(match_data.op_code)
+		
 	if op_code == 2 then
-		self.game = data.state
+		self.game = data.state		
+		-- pprint(data.state)
 	else
 		log(("Unknown opcode %d"):format(op_code))
 	end
@@ -229,46 +244,17 @@ end
 -- ---------------------------------------------------------------------------
 -- handle when a player leaves the match
 -- pass this on to the game
-local function handle_match_presence(self, match_presence_event)
+local function handle_match_presence(self, match_presence_event, message)
 	if match_presence_event.leaves and #match_presence_event.leaves > 0 then
 		warbattles.opponent_left()
 	end
 
 	if match_presence_event.joins then 
-		warbattles.join_match( function(success, message) 
-			pprint(success, message)
+		warbattles.join_match( function(success, message) 			
+			-- pprint(success, message)
 		end)
 	end
 end
-
--- ---------------------------------------------------------------------------
-
--- local function doupdate(self, callback)
-
--- 	updategame(self, function(data) 
-
--- 		-- Replace incoming data for the game object 
--- 		if(data) then 
--- 			self.game = data
-
--- 			if(self.game) then 
--- 				updategamestate(self, function(data)
--- 					self.round = tmerge(self.round, data)
--- 					if(callback) then callback(data) end
--- 					if(self.game == nil or self.game.state == nil) then return end
--- 					if(self.gamestate ~= self.game.state) then 
--- 					end
--- 				end)
--- 			end
-
--- 			-- Something has kicked us out return to previous page
--- 		else
--- 			self.swp_account = nil 
--- 			self.game = nil
--- 		end
--- 	end)
--- end 
-
 
 -- ---------------------------------------------------------------------------
 -- login to Nakama
@@ -323,7 +309,7 @@ local function login(self, callback)
 		-- We notify the game that the opponent has left.
 		realtime.on_match_presence_event(self.socket, function(message)
 			log("nakama.on_matchpresence")
-			handle_match_presence(self, message.match_presence_event)
+			handle_match_presence(self, message.match_presence_event, message)
 		end)
 
 		-- Called by Nakama when the game state has changed.
@@ -331,6 +317,11 @@ local function login(self, callback)
 		realtime.on_match_data(self.socket, function(message)
 			log("nakama.on_matchdata")
 			handle_match_data(self, message.match_data)
+		end)
+
+		realtime.on_notifications(self.socket, function(message)
+			log("warbattles.on_notification")
+			handle_match_notification(self, message)
 		end)
 
 		-- Normally in xoxo nakama joins are using matchmaker. Because we have a 

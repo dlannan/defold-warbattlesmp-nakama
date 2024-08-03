@@ -230,47 +230,18 @@ end
 
 local function joingame(self) 
 
-	-- First connect 
-	-- nakamamp.connect(self, function(data) 
-
-		setname(self, chance:name(), function(data) 
-			-- find the game name 
-			-- nakamamp.findgame( self, self.gamename, function(data) 
-
-			-- 	logtext(self, data["status"])
-			-- 	-- Game not found, then create one and join!
-			-- 	if(data["status"] ~= "OK") then 
-
-			-- 		nakamamp.creategame( self, self.gamename, function(data) 
-			-- 			if(data.status and data.status == "OK") then 
-			-- 				self.game = json.decode(data.result)
-			-- 				nakamamp.websocket_open(self, websocket_callback)
-			-- 			end
-			-- 			startgame(self, data)
-			-- 		end)
-			-- 	-- Found the game!
-			-- 	else
-			-- 		nakamamp.joingame( self, self.gamename, function(data) 
-			-- 			if(data.status and data.status == "OK") then 
-			-- 				self.game = json.decode(data.result)
-			-- 				nakamamp.websocket_open(self, websocket_callback)
-			-- 			end
-			-- 			startgame(self, data)
-			-- 		end)
-			-- 	end 
-			-- end) 
-
-			nakamamp.join_match(self, self.gamename, chance:string(20), function(joined, matchdata)
-				if(joined == true) then 
-					pprint("JOINED_GANME: "..self.gamename)
-					pprint(matchdata)
-					self.matchdata = matchdata
-				else 
-					pprint("[ERROR] FAILED_TO_JOIN_GANME: "..self.gamename)
-				end
-			end)
+	setname(self, chance:name(), function(data) 
+		nakamamp.join_match(self, self.gamename, chance:string(20), function(joined, matchdata)
+			if(joined == true) then 
+				
+				pprint("JOINED_GANME: "..self.gamename)
+				-- pprint(matchdata)
+				self.matchdata = matchdata
+			else 
+				pprint("[ERROR] FAILED_TO_JOIN_GANME: "..self.gamename)
+			end
 		end)
-	-- end)
+	end)
 end 
 
 -- ---------------------------------------------------------------------------
