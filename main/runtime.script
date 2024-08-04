@@ -11,6 +11,8 @@ local rlua 	 			= require("render.render")
 
 local tanks  			= require("main.tanks")
 
+tinsert 				= table.insert
+
 -- Dodgy fixed point to start with
 local START_POS 		= vmath.vector3(500, 500, 1)
 
@@ -118,13 +120,13 @@ local function playerschanged(self)
 	for k,v in ipairs(self.game.people) do 
 		-- Missing player - add it! - disable input!!
 		-- dont add self 
-		if(self.player_uid ~= v.uid) then 
-			if(self.otherplayers[v.uid] == nil) then 
+		if(self.player_uid ~= v.user_id) then 
+			if(self.otherplayers[v.user_id] == nil) then 
 
 				-- print("creating other player: ", v.uid, v.username)
 				local newplayer = factory.create("/players#playerfactory", START_POS, nil, {})
 				msg.post(newplayer, "player_details", { name = v.username, color = COLOR_WHITE, other=true})
-				self.otherplayers[v.uid] = newplayer
+				self.otherplayers[v.user_id] = newplayer
 			end 
 		end
 	end 
@@ -475,7 +477,7 @@ nakamamp.callbacks.match_notification = function(self, notifications)
 	for k, v in pairs(notifications.notifications.notifications) do 
 		local content = json.decode(v.content)
 		-- If this is an init call, then update game data!!!
-		if(v.subject == "PLAYER_JOINED" and content.init) then 
+		if(v.subject == "PLAYER_JOINED" and content.people) then 
 			pprint("[PLAYER_JOINED]")
 			self.game = content 
 			playerschanged(self)
@@ -484,11 +486,21 @@ nakamamp.callbacks.match_notification = function(self, notifications)
 			self.game = content 
 			playerschanged(self)			
 		elseif(v.subject == "PLAYER_MOVE" and content) then 
-
+			pprint(content)
+			if(content.data) then 
+				self.game.state = self.game.state or {}
+				tinsert(self.game.state, content.data)
+			end
 		elseif(v.subject == "PLAYER_HIT" and content) then 
-
-		elseif(v.subject == "PLAYER_MOVE" and content) then 
-
+			if(content.data) then 
+				self.game.state = self.game.state or {}
+				tinsert(self.game.state, content.data)
+			end
+		elseif(v.subject == "PLAYER_SHOOT" and content) then 
+			if(content.data) then 
+				self.game.state = self.game.state or {}
+				tinsert(self.game.state, content.data)
+			end
 		end
 	end
 end
@@ -514,12 +526,11 @@ end
 nakamamp.callbacks.match_presence = function(self, match_presence_event, message)
 
 	if match_presence_event.leaves and #match_presence_event.leaves > 0 then
-		print(self.match)
-		leave_match(self.match.match_id)
+		nakamamp.leave_match(self, self.match.match.match_id, function()
+		end)
 	end
 
 	if match_presence_event.joins then 
-		msg.post(self.thisplayer, "player_details", {name = self.player_name, color = self.player_color})
 	end
 end
 

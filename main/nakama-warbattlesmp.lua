@@ -229,6 +229,7 @@ end
 -- decode it and pass it on to the game
 local function handle_match_notification(self, notifications)
 
+	pprint(notifications)
 	for k, v in pairs(notifications.notifications.notifications) do 
 		local content = json.decode(v.content)
 		-- If this is an init call, then update game data!!!
@@ -274,6 +275,18 @@ local function handle_match_presence(self, match_presence_event, message)
 		--_Gend)
 	end
 end
+
+
+-- ---------------------------------------------------------------------------
+-- User defined callbacks
+--    Defaults are provided
+
+local callbacks 	= {
+	match_notification 	= handle_match_notification,
+	match_presence 		= handle_match_presence,
+	match_data 			= handle_match_data,
+}
+
 
 -- ---------------------------------------------------------------------------
 -- login to Nakama
@@ -328,19 +341,19 @@ local function login(self, callback)
 		-- We notify the game that the opponent has left.
 		realtime.on_match_presence_event(self.socket, function(message)
 			log("nakama.on_matchpresence")
-			handle_match_presence(self, message.match_presence_event, message)
+			callbacks.match_presence(self, message.match_presence_event, message)
 		end)
 
 		-- Called by Nakama when the game state has changed.
 		-- We parse the data and send it to the game.
 		realtime.on_match_data(self.socket, function(message)
 			log("nakama.on_matchdata")
-			handle_match_data(self, message.match_data)
+			callbacks.match_data(self, message.match_data)
 		end)
 
 		realtime.on_notifications(self.socket, function(message)
 			log("warbattles.on_notification")
-			handle_match_notification(self, message)
+			callbacks.match_notification(self, message)
 		end)
 
 		-- Normally in xoxo nakama joins are using matchmaker. Because we have a 
@@ -382,16 +395,6 @@ local function logout( self )
 		end
 	end)
 end
-
--- ---------------------------------------------------------------------------
--- User defined callbacks
---    Defaults are provided
-
-local callbacks 	= {
-	match_notification 	= handle_match_notification,
-	match_presence 		= handle_match_presence,
-	match_data 			= handle_match_data,
-}
 
 
 -- ---------------------------------------------------------------------------

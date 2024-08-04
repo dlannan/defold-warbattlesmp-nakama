@@ -430,8 +430,6 @@ warbattlempgame.processmessage   =  function( uid, name, message )
     end
 
     if(subject) then 
-        pprint("[Subject] "..subject)
-        pprint(game.people)
         -- Post this to all players
         for _, presence in ipairs(game.people) do
             if(uid ~= presence.user_id) then  -- Dont send stuff to self
