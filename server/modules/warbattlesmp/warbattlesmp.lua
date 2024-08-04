@@ -343,6 +343,7 @@ warbattlempgame.updateperson = function(game, newperson)
     local game =  warbattlempgame.getgame(game.gamename) 
     if(game == nil) then return nil end 
 
+    if(game.people == nil) then game.people = {} end
     table.insert(game.people, newperson)
     nk.localcache_put("warbattle_"..game.gamename, game, 0)
     return game

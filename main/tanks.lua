@@ -213,7 +213,7 @@ local function createTanks( gameobj )
 end
 
 ---------------------------------------------------------------------------------
--- Reset the tanks
+-- Update the tanks
 local function updateTank( tid, dt )
     local tank = gamedata.tanks[tid]
     if(tank) then 
@@ -224,11 +224,22 @@ end
 
 ---------------------------------------------------------------------------------
 -- Reset the tanks
-local function resetTanks( gameobj )
-    for k,tank in ipairs(gameobj.tanks) do 
+local function resetTanks()
+    for k,tank in ipairs(gamedata.tanks) do 
         tank.reset()
     end 
 end
+
+---------------------------------------------------------------------------------
+-- Delete Tanks
+local function deleteTanks()
+    if(gamedata and gamedata.tanks) then
+        for k,tank in ipairs(gamedata.tanks) do 
+            go.delete(tank.tobj)
+        end 
+    end
+end
+
 
 ---------------------------------------------------------------------------------
 -- Get a single tank
@@ -242,6 +253,7 @@ return {
     createTanks     = createTanks,
     updateTank      = updateTank,
     resetTanks      = resetTanks,
+    deleteTanks     = deleteTanks,
 
     getTank         = getTank,
 

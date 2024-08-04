@@ -14,8 +14,7 @@ local ERROR = {
 local function CheckForMatch( label )
     local matches = nk.match_list(10, true, label, 1, 3)
     local matchid = nil
-    pprint(matches)
-
+    
     -- Just get the first match. There _shouldnt_ be any duplicate matches.
     if(matches and #matches > 0) then 
         matchid = matches[1].match_id

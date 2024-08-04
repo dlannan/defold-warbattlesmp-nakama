@@ -3,13 +3,17 @@ local tremove 			= table.remove
 
 local bser 				= require "lua.binser"
 
-local warbattles 		= require "main.warbattles"
 local nakama 			= require "nakama.nakama"
 local realtime 			= require "nakama.socket"
 local log 				= require "nakama.util.log"
 local defold 			= require "nakama.engine.defold"
 local json 				= require "nakama.util.json"
 local utils  			= require "lua.utils"
+local chance 			= require("lua.chance")	
+
+
+-- Use a single device id value (easier auth)
+local ENABLE_FIXED_DEVICE		= nil
 
 -- Some general settings. This is game specific.
 local MAX_LOGIN_ATTEMPTS		= 10
@@ -75,13 +79,16 @@ end
 
 -- ---------------------------------------------------------------------------
 -- authentication using device id
-local function device_login(client)
+local function device_login(self)
+
+	self.player_name = self.player_name or chance:name()
+	self.client.uuid = self.client.uuid or defold.uuid(ENABLE_FIXED_DEVICE)
 	-- login using the token and create an account if the user
 	-- doesn't already exist
-	local auth = nakama.authenticate_device(client, defold.uuid(true), nil, true)
+	local auth = nakama.authenticate_device(self.client, self.client.uuid, nil, true, self.player_name)
 	if auth and auth.token then
 		-- store the token and use it when communicating with the server
-		nakama.set_bearer_token(client, auth.token)
+		nakama.set_bearer_token(self.client, auth.token)
 		return true, auth
 	end
 	log("Unable to login")
@@ -90,14 +97,21 @@ end
 
 -- ---------------------------------------------------------------------------
 -- Update match player name
-local function setplayername( self, newname )
+local function setplayername( self, newname, callback )
 
-	local result = nakama.get_account(self.client)
-	if result.error then
-		print(result.message)
-		return
-	end
-	local result = nakama.update_account(self.client, result.avatar_url, newname, result.lang_tag, result.location, result.timezone, newname)
+	nakama.sync(function()
+		nakama.get_account(self.client, function(result)
+			-- Save user info for future logout and such
+			if result and result.error then 
+				pprint(result)
+			else
+				nakama.update_account(self.client, result.user.avatar_url or nil, newname, result.user.lang_tag or nil, 
+						result.user.location or nil, result.user.timezone or nil, newname, function(msg)
+					callback(msg, result)
+				end)
+			end
+		end)
+	end)
 end	
 
 -- ---------------------------------------------------------------------------
@@ -108,7 +122,8 @@ local function join_match(self, match_id, token, match_callback)
 
 	nakama.sync(function()
 		
-		local joindata = json.encode({ label = match_id })
+		local joindata = json.encode({ label = match_id, username = self.player_name, user_id = self.player_uid })
+		pprint(joindata)
 		local resp = nakama.rpc_func2(self.client, RPC_DOMATCHJOIN, joindata )
 
 		nakama.sync(function()
@@ -116,17 +131,16 @@ local function join_match(self, match_id, token, match_callback)
 
 				local payload = json.encode({ gamename = self.gamename, uid = self.player_name })
 				local resp = nakama.rpc_func2(self.client, RPC_DOMATCHCREATE, payload )
-				pprint(resp)
 
 				realtime.match_join(self.socket, resp.payload, nil, nil, function(data)				
 					self.match = data
-					self.match.owner = self.player_name
+					self.match.owner = self.player_uid
 					match_callback(true, self.match)
 				end)
 			else
 				realtime.match_join(self.socket, resp.payload, nil, nil, function(data)				
 					self.match = data
-					self.match.owner = self.player_name
+					self.match.owner = nil
 					match_callback(true, self.match)
 				end)
 			end
@@ -136,13 +150,17 @@ end
 
 -- ---------------------------------------------------------------------------
 -- leave a match
-local function leave_match(match_id)
+local function leave_match(self, match_id, callback)
 	nakama.sync(function()
 		log("Sending match_leave message")
-		local result = realtime.match_leave(socket, match_id)
-		if result.error then
-			log(result.error.message)
-			-- pprint(result)
+		if(self.socket) then 
+			local result = realtime.match_leave(self.socket, match_id, function(success)
+
+				pprint(match_id)
+				pprint(success)
+				pprint(err)
+				callback()
+			end)
 		end
 	end)
 end
@@ -245,14 +263,15 @@ end
 -- handle when a player leaves the match
 -- pass this on to the game
 local function handle_match_presence(self, match_presence_event, message)
+	
 	if match_presence_event.leaves and #match_presence_event.leaves > 0 then
-		warbattles.opponent_left()
+		--warbattles.opponent_left()
 	end
 
 	if match_presence_event.joins then 
-		warbattles.join_match( function(success, message) 			
-			-- pprint(success, message)
-		end)
+		-- warbattles.join_match( function(success, message) 			
+		--	pprint(success, message)
+		--_Gend)
 	end
 end
 
@@ -264,8 +283,8 @@ end
 local function login(self, callback)
 
 	-- enable logging
-	log.print()
-
+	--log.print()
+	
 	-- create server config
 	-- we read server url, port and server key from the game.project file
 	local config = {}
@@ -276,33 +295,33 @@ local function login(self, callback)
 	config.password = ""
 	config.engine = defold
 
-	self.client = nakama.create_client(config)
+	self.client = self.client or nakama.create_client(config)
 
 	nakama.sync(function()
 		-- Start by doing a device login (the login will be tied
 		-- not to a specific user but to the device the game is
 		-- running on)
-		local ok, auth = device_login(self.client)
-		if not ok then
-			callback(false, "Unable to login")
-			return
+		if(self.auth == nil) then 
+			local ok, auth = device_login(self)
+			if not ok then
+				callback(false, "Unable to login")
+				return
+			end
+			-- the logged in account
+			self.auth = auth
 		end
-
-		-- the logged in account
-		self.auth = auth
-		self.account = nakama.get_account(self.client)
-
+		
 		-- Next we create a socket connection as well
 		-- we use the socket connetion to exchange messages
 		-- with the matchmaker and match
-		self.socket = nakama.create_socket(self.client)
+		self.socket = self.socket or nakama.create_socket(self.client)
 
 		local ok, err = realtime.connect(self.socket)
 		if not ok then
 			log("Unable to connect: ", err)
 			callback(false, "Unable to create socket connection")
 			return
-		end
+		end		
 
 		-- Called by Nakama when a player has left (or joined) the
 		-- current match.
@@ -326,41 +345,72 @@ local function login(self, callback)
 
 		-- Normally in xoxo nakama joins are using matchmaker. Because we have a 
 		-- match name, this is not needed. We join directly to the match.
-		warbattles.on_join_match(function(fn_on_join)
-			log("warbattles.on_join_match")
-		end)
+		-- warbattles.on_join_match(function(fn_on_join)
+		-- 	log("warbattles.on_join_match")
+		-- end)
 
 		-- Called by the game when the player pressed the Leave button
 		-- when a game is finished (instead of waiting for the next match).
 		-- We send a match leave message to Nakama. Fire and forget.
-		warbattles.on_leave_match(function()
-			log("warbattles.on_leave_match")
-			leave_match(match.match_id)
-		end)
+		-- warbattles.on_leave_match(function()
+		-- 	log("warbattles.on_leave_match")
+		-- 	leave_match(match.match_id)
+		-- end)
 
 		-- Called by the game when the player is trying to make a move.
 		-- We send a match data message to Nakama.
-		warbattles.on_send_player_move(function(row, col)
-			log("warbattles.on_send_player_move")
-			send_player_move(match.match_id, row, col)
-		end)
+		-- warbattles.on_send_player_move(function(row, col)
+		-- 	log("warbattles.on_send_player_move")
+		-- 	send_player_move(match.match_id, row, col)
+		-- end)
 
 		callback(true)
 	end)
 end
 
 -- ---------------------------------------------------------------------------
+
+local function logout( self )
+
+	nakama.sync(function()
+		if(self.client) then 
+			nakama.session_logout(self.client)
+			self.client = nil
+			self.auth = nil 
+			self.account = nil
+			self.socket = nil 
+		end
+	end)
+end
+
+-- ---------------------------------------------------------------------------
+-- User defined callbacks
+--    Defaults are provided
+
+local callbacks 	= {
+	match_notification 	= handle_match_notification,
+	match_presence 		= handle_match_presence,
+	match_data 			= handle_match_data,
+}
+
+
+-- ---------------------------------------------------------------------------
 return {
 	-- setup 			= setup_swampy,
 	login 			= login,
+	logout 			= logout,
 	-- connect 		= connect,
+	
 	resetclient		= resetclient,
 	setplayername 	= setplayername,
 
 	join_match		= join_match,
+	leave_match		= leave_match,
 
 	send_data		= send_data,
 	update_game 	= update_game,
+	callbacks		= callbacks,
+	
 	EVENT 			= USER_EVENT,
 }
 

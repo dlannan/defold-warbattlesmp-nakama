@@ -98,9 +98,13 @@ local function setname(self, name, callback)
 
 	self.player_color	= colorgen()
 	self.player_name 	= name
-	self.player_uid 	= self.user_id
-	nakamamp.setplayername(self, name)
-	callback({})
+	self.player_token 	= self.player_token or chance:string(20)
+		
+	nakamamp.setplayername(self, name, function(msg, result)
+		self.user_id 		= result.user.id
+		self.player_uid 	= self.user_id
+		callback(result)
+	end)
 end
 
 -- ---------------------------------------------------------------------------
@@ -215,9 +219,14 @@ end
 
 local function connectgame(self, callback)
 	-- nakamamp.setup(self, "WarBattlesMP", "player1")
+
 	nakamamp.login(self, function(err, data) 
 		if(err == false) then 
 			logtext(self, "Login FAILED.")
+			pprint("-- -- -- -- -- >>")
+			pprint(err)
+			pprint(data)
+			pprint("-- -- -- -- -- >>")
 			msg.post("/gui-lobby", "connect_error")
 		else 
 			logtext(self, "Login OK.")
@@ -230,12 +239,10 @@ end
 
 local function joingame(self) 
 
-	setname(self, chance:name(), function(data) 
-		nakamamp.join_match(self, self.gamename, chance:string(20), function(joined, matchdata)
+	setname(self, self.player_name, function(data) 
+		nakamamp.join_match(self, self.gamename, self.player_token, function(joined, matchdata)
 			if(joined == true) then 
-				
 				pprint("JOINED_GANME: "..self.gamename)
-				-- pprint(matchdata)
 				self.matchdata = matchdata
 			else 
 				pprint("[ERROR] FAILED_TO_JOIN_GANME: "..self.gamename)
@@ -246,15 +253,27 @@ end
 
 -- ---------------------------------------------------------------------------
 
-function init(self)
+local function doinit(self)
+
 	self.gamerunning 	= false
 	self.otherplayers 	= {}
 	self.frame 			= 0
 	self.sendbuffer 	= {}
-	
-	msg.post(".", "acquire_input_focus")
-	chance:seed(os.time())
 
+	self.game	 		= nil
+	self.started 		= nil
+		
+
+	chance:seed(os.time())	
+	tanks.deleteTanks()
+end
+
+-- ---------------------------------------------------------------------------
+
+function init(self)
+	msg.post(".", "acquire_input_focus")
+	
+	doinit(self)
 	msg.post ("@render:", "use_player_pos", { player_pos = vmath.vector3() })
 end
 
@@ -290,7 +309,7 @@ function update(self, dt)
 	if(self.started) then 
 		updatestates(self)
 	end
-	
+
 	self.frame = self.frame + 1
 end
 
@@ -307,7 +326,14 @@ local function cleanupgame(self)
 	for k,v in pairs(self.otherplayers) do 
 		go.delete(v)
 	end 
-	self.otherplayers = {}
+	doinit(self)
+		
+	nakamamp.leave_match(self, self.match.match.match_id, function()
+		-- nakamamp.logout(self, nil, nil, function(msg)
+		-- 	pprint("------------> LOGGED OUT")
+		-- 	pprint(msg)
+		-- end)
+	end)
 end
 
 -- ---------------------------------------------------------------------------
@@ -365,8 +391,7 @@ function on_message(self, message_id, message, sender)
 		msg.post("/gui-bg", "enable")	
 		msg.post("/gui-lobby", "enable")	
 		msg.post("/gui-players", "disable")
-		nakamamp.leavegame( self, self.gamename, function(data) 
-			self.game = nil
+		nakamamp.leave_match( self, self.match.match.match_id, function(data) 
 		end)
 	end
 
@@ -440,6 +465,62 @@ end
 -- ---------------------------------------------------------------------------
 
 function on_reload(self)
+end
+
+-- ---------------------------------------------------------------------------
+-- handle received match data
+-- decode it and pass it on to the game
+nakamamp.callbacks.match_notification = function(self, notifications)
+
+	for k, v in pairs(notifications.notifications.notifications) do 
+		local content = json.decode(v.content)
+		-- If this is an init call, then update game data!!!
+		if(v.subject == "PLAYER_JOINED" and content.init) then 
+			pprint("[PLAYER_JOINED]")
+			self.game = content 
+			playerschanged(self)
+		elseif(v.subject == "PLAYER_LEFT" and content.people) then 
+			pprint("[PLAYER_LEFT]")
+			self.game = content 
+			playerschanged(self)			
+		elseif(v.subject == "PLAYER_MOVE" and content) then 
+
+		elseif(v.subject == "PLAYER_HIT" and content) then 
+
+		elseif(v.subject == "PLAYER_MOVE" and content) then 
+
+		end
+	end
+end
+
+-- ---------------------------------------------------------------------------
+-- handle received match data
+-- decode it and pass it on to the game
+nakamamp.callbacks.match_data = function(self, match_data)
+	local data = json.decode(match_data.data)
+	local op_code = tonumber(match_data.op_code)
+
+	if op_code == 2 then
+		self.game = data.state		
+		-- pprint(data.state)
+	else
+		log(("Unknown opcode %d"):format(op_code))
+	end
+end
+
+-- ---------------------------------------------------------------------------
+-- handle when a player leaves the match
+-- pass this on to the game
+nakamamp.callbacks.match_presence = function(self, match_presence_event, message)
+
+	if match_presence_event.leaves and #match_presence_event.leaves > 0 then
+		print(self.match)
+		leave_match(self.match.match_id)
+	end
+
+	if match_presence_event.joins then 
+		msg.post(self.thisplayer, "player_details", {name = self.player_name, color = self.player_color})
+	end
 end
 
 -- ---------------------------------------------------------------------------

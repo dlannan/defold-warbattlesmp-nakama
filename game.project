@@ -1,6 +1,7 @@
 [project]
 title = War battles MP Nakama
 version = 0.1
+bundle_exclude_resources = 
 dependencies#0 = https://github.com/britzl/gooey/archive/master.zip
 dependencies#1 = https://github.com/defold/extension-websocket/archive/master.zip
 

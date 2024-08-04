@@ -2498,10 +2498,10 @@ function M.session_logout(client, refreshToken, token, callback, retry_policy, c
 	local query_params = {}
 
 	local post_data = nil
-	post_data = json.encode({
-	refreshToken = refreshToken,
-	token = token,
-	})
+	-- post_data = json.encode({
+	-- refreshToken = refreshToken,
+	-- token = token,
+	-- })
 
 	return http(client, callback, url_path, query_params, "POST", post_data, retry_policy, cancellation_token, function(result)
 		return result
