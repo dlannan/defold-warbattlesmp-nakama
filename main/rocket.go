@@ -47,6 +47,7 @@ embedded_components {
   "group: \"rockets\"\n"
   "mask: \"tanks\"\n"
   "mask: \"buildings\"\n"
+  "mask: \"player\"\n"
   "embedded_collision_shape {\n"
   "  shapes {\n"
   "    shape_type: TYPE_BOX\n"

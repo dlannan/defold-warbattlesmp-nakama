@@ -124,8 +124,8 @@ local function playerschanged(self)
 			if(self.otherplayers[v.user_id] == nil) then 
 
 				-- print("creating other player: ", v.uid, v.username)
-				local newplayer = factory.create("/players#playerfactory", START_POS, nil, {})
-				msg.post(newplayer, "player_details", { name = v.username, color = COLOR_WHITE, other=true})
+				local newplayer = factory.create("/players#playerfactory", START_POS, nil, { isplayer = 0 })
+				msg.post(newplayer, "player_details", { name = v.username, color = COLOR_WHITE, other=newplayer})
 				self.otherplayers[v.user_id] = newplayer
 			end 
 		end
@@ -170,65 +170,12 @@ end
 
 -- ---------------------------------------------------------------------------
 
-local function websocket_callback(self, conn, data)
-
-	--pprint("[WS CALLBACK]", data.event)
-	if data.event == websocket.EVENT_DISCONNECTED then
-		pprint("Disconnected: " .. tostring(conn))
-		self.ws_connect = nil
-
-	elseif data.event == websocket.EVENT_CONNECTED then
-		pprint("Connected: " .. tostring(conn))
-		
-		local evt = { event = "REQUEST_PEOPLE", frame = self.game.frame }
-		nakamamp.websocket_send(self, sfolk.dumps(evt))
-		
-	elseif data.event == websocket.EVENT_ERROR then
-		pprint("Error: '" .. data.message .. "'")
-		
-	elseif data.event == websocket.EVENT_MESSAGE then
-
-		-- Ignore any bs msg data
-		if(data.message and #data.message > 10) then 
-			
-			local msg = sfolk.loads(data.message)
-			if(msg and msg.event) then 
-
-				if(msg.event == "REQUEST_GAME") then 
-					self.game = msg.data
-
-				elseif(self.game) then 
-					self.game.frame = msg.frame 
-					self.game.time = msg.time  * 0.001
-				end
-				-- print(msg.event)
-
-				if(msg.event == "REQUEST_ROUND") then 
-					self.game.state = msg.data
-					updatestates(self)
-				
-				elseif(msg.event == "REQUEST_PEOPLE") then 
-
-					self.game.people = msg.data
-					playerschanged(self)
-				end
-			end 
-		end 
-	end
-end
-
--- ---------------------------------------------------------------------------
-
 local function connectgame(self, callback)
 	-- nakamamp.setup(self, "WarBattlesMP", "player1")
 
 	nakamamp.login(self, function(err, data) 
 		if(err == false) then 
 			logtext(self, "Login FAILED.")
-			pprint("-- -- -- -- -- >>")
-			pprint(err)
-			pprint(data)
-			pprint("-- -- -- -- -- >>")
 			msg.post("/gui-lobby", "connect_error")
 		else 
 			logtext(self, "Login OK.")
@@ -276,7 +223,6 @@ function init(self)
 	msg.post(".", "acquire_input_focus")
 	
 	doinit(self)
-	msg.post ("@render:", "use_player_pos", { player_pos = vmath.vector3() })
 end
 
 -- ---------------------------------------------------------------------------
@@ -332,7 +278,6 @@ local function cleanupgame(self)
 		
 	nakamamp.leave_match(self, self.match.match.match_id, function()
 		-- nakamamp.logout(self, nil, nil, function(msg)
-		-- 	pprint("------------> LOGGED OUT")
 		-- 	pprint(msg)
 		-- end)
 	end)
@@ -376,7 +321,7 @@ function on_message(self, message_id, message, sender)
 				joingame(self)				
 			end 
 		end)
-	end
+	end 
 	
 	if( message_id== hash("setname") ) then 
 		if(message.name and string.len(message.name)) then 
@@ -389,22 +334,22 @@ function on_message(self, message_id, message, sender)
 			end)
 		end 
 	end
+	
 	if(message_id == hash("mainmenu") ) then 
 		msg.post("/gui-bg", "enable")	
 		msg.post("/gui-lobby", "enable")	
 		msg.post("/gui-players", "disable")
 		nakamamp.leave_match( self, self.match.match.match_id, function(data) 
 		end)
-	end
-
+	end 
+	
 	if(message_id == hash("begingame") ) then 
 
-		-- TODO: put this in a func
-		self.thisplayer = factory.create("/players#playerfactory", START_POS, nil, {})
+		self.thisplayer = factory.create("/players#playerfactory", START_POS, nil, { isplayer = 1 })
 		msg.post(self.thisplayer, "player_details", {name = self.player_name, color = self.player_color})
 		self.gamerunning = true
-	end
-
+	end 
+	
 	-- Send server player move
 	--    Server collects these, then sends out to other players in state 
 	--    output. 
@@ -419,7 +364,6 @@ function on_message(self, message_id, message, sender)
 			msg.post ("@render:", "use_player_pos", { player_pos = target_player_pos })
 		end
 		state.uid 		= self.user_id
-		--state.lt 		= self.game.frame + 2
 
 		self.last_player_move = self.frame
 		local evt = { 
@@ -429,9 +373,8 @@ function on_message(self, message_id, message, sender)
 			frame = self.frame, 
 			data = state 
 		}
-		-- local dsend = sfolk.dumps(evt)
 		nakamamp.send_data(self, evt)
-	end 
+	end
 	
 	if(message_id == hash("player_shoot") ) then 
 
@@ -439,7 +382,6 @@ function on_message(self, message_id, message, sender)
 		if(self.last_player_shoot and self.last_player_shoot+2 >= self.frame) then return end
 		local state 	= message.state 
 		state.uid 		= self.user_id
-		--state.lt 		= self.game.frame + 2
 		
 		self.last_player_shoot = self.frame
 		local evt = { 
@@ -449,9 +391,20 @@ function on_message(self, message_id, message, sender)
 			frame = self.frame, 
 			data = state 
 		}
-		-- local dsend = sfolk.dumps(evt)
 		nakamamp.send_data(self, evt)
-	end 
+	end
+	
+	if(message_id == hash("player_bumped") ) then 
+		-- Animate the main player if they are hit by a rocket. This means sending a move as well.
+		-- check if the other_id is our player (self.other will be nil)
+		local player = msg.url(nil, message.other_id, "player")
+		local isplayer = go.get(player, "isplayer")
+		if(isplayer == 1) then 
+			local target = message.other_position + message.dir * message.bumpdist
+			go.animate(message.other_id, "position", go.PLAYBACK_ONCE_FORWARD, target, go.EASING_LINEAR, 0.5, 0, function(self, url, prop)
+			end)
+		end
+	end
 end
 
 -- ---------------------------------------------------------------------------
@@ -486,7 +439,6 @@ nakamamp.callbacks.match_notification = function(self, notifications)
 			self.game = content 
 			playerschanged(self)			
 		elseif(v.subject == "PLAYER_MOVE" and content) then 
-			pprint(content)
 			if(content.data) then 
 				self.game.state = self.game.state or {}
 				tinsert(self.game.state, content.data)

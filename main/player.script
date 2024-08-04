@@ -17,6 +17,7 @@ fire_lookup[-11]	= 3.92699
 -- -----------------------------------------------------------------------------
 
 go.property("pcolor", vmath.vector4(1,1,1,1))
+go.property("isplayer", 1)
 
 local DIST_CHANGED 		= 1
 -- This can be tweaked as needed. Probably should match network/cpu perf
@@ -54,6 +55,10 @@ function init(self)
 	self.prev_input = { x = 0, y = 0 }
 	self.move_t = socket.gettime()
 	sprite.play_flipbook("#sprite", hash("player-idle"))
+
+	if(self.isplayer == 1) then 
+		msg.post ("@render:", "use_player_pos", { player_pos = vmath.vector3() })
+	end
 end
 
 -- -----------------------------------------------------------------------------
@@ -185,7 +190,7 @@ local function do_update(self, dt)
 	if self.firing then
 		local angle = fire_lookup[self.strdir]
 		local rot = vmath.quat_rotation_z(angle)            -- [2]
-		local props = { dir = self.dir }                    -- [3]
+		local props = { dir = self.dir, owner = self.other or go.get_id() }                    -- [3]
 		factory.create("#rocketfactory", nil, rot, props)   -- [4]
 	end
 
@@ -281,7 +286,7 @@ function on_message(self, message_id, message, sender)
 
 		-- Start update timers for players
 		if(message.other) then 
-			self.other = true
+			self.other = message.other
 		end
 	end 
 	

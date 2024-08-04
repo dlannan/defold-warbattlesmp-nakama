@@ -123,7 +123,6 @@ local function join_match(self, match_id, token, match_callback)
 	nakama.sync(function()
 		
 		local joindata = json.encode({ label = match_id, username = self.player_name, user_id = self.player_uid })
-		pprint(joindata)
 		local resp = nakama.rpc_func2(self.client, RPC_DOMATCHJOIN, joindata )
 
 		nakama.sync(function()
@@ -155,10 +154,6 @@ local function leave_match(self, match_id, callback)
 		log("Sending match_leave message")
 		if(self.socket) then 
 			local result = realtime.match_leave(self.socket, match_id, function(success)
-
-				pprint(match_id)
-				pprint(success)
-				pprint(err)
 				callback()
 			end)
 		end
@@ -218,8 +213,7 @@ local function send_data(self, data)
 		local payload = json.encode(data)
 		local resp = nakama.rpc_func2(self.client, RPC_SENDMATCHDATA, payload )
 		if resp and resp.error then
-			print(resp.error.message)
-			-- pprint(resp)
+			pprint(resp)
 		end
 	end)
 end
@@ -229,7 +223,6 @@ end
 -- decode it and pass it on to the game
 local function handle_match_notification(self, notifications)
 
-	pprint(notifications)
 	for k, v in pairs(notifications.notifications.notifications) do 
 		local content = json.decode(v.content)
 		-- If this is an init call, then update game data!!!

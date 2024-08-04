@@ -1,4 +1,6 @@
 go.property("dir", vmath.vector3())
+go.property("owner", hash("temp"))
+go.property("bumpdist", 50.0)
 
 function init(self)
 	self.speed = 200
@@ -29,10 +31,25 @@ function on_message(self, message_id, message, sender)
 	if message_id == hash("animation_done") then
 		go.delete()
 	elseif message_id == hash("collision_response") then
-		if(self.exploding == false) then explode(self) end 
-		if message.other_group ~= hash("buildings") then
+		
+		local doexplode = true
+		if message.other_group == hash("tanks") then 
 			go.delete(message.other_id)
 			msg.post("/gui#ui", "add_score", {score = 100}) 
+			
+		elseif message.other_group == hash("player") then
+
+			if(self.owner ~= message.other_id) then 
+				message.dir = self.dir
+				message.bumpdist = self.bumpdist
+				msg.post("/gui-runtime", "player_bumped", message)
+			else 
+				doexplode = nil
+			end
+		end
+		
+		if(doexplode) then 
+			if(self.exploding == false) then explode(self) end 
 		end
 	end
 end

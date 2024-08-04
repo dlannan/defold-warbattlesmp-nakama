@@ -10,7 +10,7 @@ local M = {
 }
 
 local function broadcast_gamestate_to_recipient(dispatcher, gamestate, recipient)
-    nk.logger_info("broadcast_gamestate")
+    -- nk.logger_info("broadcast_gamestate")
     local message = tclean( {
         state = gamestate,
     } )
@@ -21,7 +21,7 @@ end
 function M.match_init(context, setupstate)
     nk.logger_info("match_init")
     local gamestate = warbattle.creategame(setupstate.uid, setupstate.gamename)
-    local tickrate = 1 -- per sec
+    local tickrate = 2 -- per sec
     local label = setupstate.gamename
     return gamestate, tickrate, label
 end
@@ -48,9 +48,9 @@ function M.match_leave(context, dispatcher, tick, gamestate, presences)
 end
 
 function M.match_loop(context, dispatcher, tick, gamestate, messages)
-    nk.logger_info("match_loop")
+    -- nk.logger_info("match_loop")
     gamestate.frame = gamestate.frame + 1
-    gamestate.time = gamestate.frame
+    gamestate.time = gamestate.frame * 0.5
 
     local newgamestate = warbattle.updategame( gamestate )
     for _, presence in ipairs(newgamestate.people) do

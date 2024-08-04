@@ -289,17 +289,24 @@ local function checkState( newgamestate )
         game[k] = v
     end
 
-    if(game.state) then 
-        for k,v in ipairs(game.state) do
+    -- if(game.state) then 
+    --     for k,v in ipairs(game.state) do
 
-            -- kill state if lifetime is old
-            if(v and game.frame > v.lt) then 
-                table.remove(game.state, i)
-            end         
-        end 
-        -- Allows client to sync to the module frame
-        game.state.frame = game.frame
-    end 
+    --         -- kill state if lifetime is old
+    --         if(v and game.frame > v.lt) then 
+    --             table.remove(game.state, i)
+    --         end         
+    --     end 
+    --     -- Allows client to sync to the module frame
+    --     game.state.frame = game.frame
+    -- end 
+
+    -- push in last knowns into the state (maximum of 4 positions)
+    -- if(game.lastknown) then 
+    --     for k,v in pairs(game.lastknown) do 
+    --         table.insert( game.state, v )
+    --     end
+    -- end
 
     -- Write back any changes to the cache. This is shitty, would be better to use a lua table 
     --   Even a global one would be nicer.
@@ -421,6 +428,12 @@ warbattlempgame.processmessage   =  function( uid, name, message )
     if(data.event == USER_EVENT.PLAYER_MOVE) then 
 
         subject = "PLAYER_MOVE"
+
+        -- Store the last known position - so we can publish this as a state in the match loop
+        -- This will ensure positions are quite close to correct positions
+        -- game.lastknown = game.lastknown or {}
+        -- game.lastknown[data.data.uid] = data
+
     elseif (data.event == USER_EVENT.PLAYER_HIT) then 
 
         subject = "PLAYER_HIT"
@@ -428,6 +441,8 @@ warbattlempgame.processmessage   =  function( uid, name, message )
 
         subject = "PLAYER_SHOOT"
     end
+
+    -- nk.localcache_put("warbattle_"..name, game, 0)
 
     if(subject) then 
         -- Post this to all players
